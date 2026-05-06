@@ -87,12 +87,20 @@ def send_memo_tx(memo_data, current_idx, total):
     txn = Transaction([sender_key], msg, recent_blockhash)
     
     try:
-        res = client.send_transaction(txn)
-        print(f"Progress ({current_idx}/{total}): {res.value}")
-        time.sleep(1.0)
-        return str(res.value)
+        res = client.send_raw_transaction(bytes(txn))
+        sig = res.value
+        print(f"Progress ({current_idx}/{total}): Sent {sig}")
+        
+        # Confirm transaction to ensure it actually landed on the blockchain
+        confirm_res = client.confirm_transaction(sig)
+        if confirm_res.value[0].err:
+            raise Exception(f"Transaction failed on-chain: {confirm_res.value[0].err}")
+        
+        print(f"Progress ({current_idx}/{total}): Confirmed {sig}")
+        time.sleep(0.5)
+        return str(sig)
     except Exception as e:
-        print(f"Failed to send chunk index {current_idx}: {e}")
+        print(f"Failed to send or confirm chunk index {current_idx}: {e}")
         return None
 
 def upload(file_path, tattoo_id, user_email):
@@ -119,17 +127,26 @@ def upload(file_path, tattoo_id, user_email):
     meta_str = json.dumps(metadata_dict)
     meta_b64 = base64.b64encode(meta_str.encode('utf-8')).decode('utf-8')
     
+    signatures = []
+    
     # Send Index 0
     memo_data_0 = f"TAO:{user_email}:{tattoo_id}|f|0|{total_data_chunks}|{meta_b64}"
-    send_memo_tx(memo_data_0, 0, total_data_chunks)
+    sig0 = send_memo_tx(memo_data_0, 0, total_data_chunks)
+    if not sig0:
+        raise Exception("Failed to confirm metadata chunk (index 0). Upload aborted.")
+    signatures.append(sig0)
 
     # Send Index 1 to total_data_chunks
     for i in range(total_data_chunks):
         chunk = raw_data[i*chunk_size : (i+1)*chunk_size]
         memo_data = f"TAO:{user_email}:{tattoo_id}|f|{i+1}|{total_data_chunks}|{chunk}"
-        send_memo_tx(memo_data, i+1, total_data_chunks)
+        sig = send_memo_tx(memo_data, i+1, total_data_chunks)
+        if not sig:
+            raise Exception(f"Failed to confirm chunk {i+1}. Upload aborted.")
+        signatures.append(sig)
 
     print(f"\nFile tattoo completed! Unique ID: {tattoo_id}")
+    return signatures
 
 def upload_string(text, tattoo_id, user_email):
     if len(text) > 500:
@@ -146,8 +163,9 @@ def upload_string(text, tattoo_id, user_email):
         chunk = raw_data[i*chunk_size : (i+1)*chunk_size]
         memo_data = f"TAO:{user_email}:{tattoo_id}|s|{i+1}|{total_chunks}|{chunk}"
         sig = send_memo_tx(memo_data, i+1, total_chunks)
-        if sig:
-            signatures.append(sig)
+        if not sig:
+            raise Exception(f"Failed to confirm string chunk {i+1}. Upload aborted.")
+        signatures.append(sig)
 
     print(f"\nString tattoo completed! Unique ID: {tattoo_id}")
     return signatures

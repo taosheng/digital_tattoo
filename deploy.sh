@@ -28,6 +28,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --platform managed \
     --region "$REGION" \
     --allow-unauthenticated \
+    --memory 1Gi \
     --port 8080
 
 # Get Service URL

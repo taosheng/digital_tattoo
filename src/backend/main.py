@@ -4,7 +4,7 @@ import time
 import httpx
 from datetime import datetime
 from pydantic import BaseModel
-from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Security
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Security, BackgroundTasks, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
@@ -147,8 +147,166 @@ def create_string_tattoo(req: StringTattooRequest, email: str = Depends(verify_t
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def process_file_upload_worker(
+    content: bytes,
+    filename: str,
+    content_type: str,
+    original_size: int,
+    email: str,
+    new_tattoo_id: str,
+    doc_ref
+):
+    t_ref = doc_ref.collection(u'tattoos').document(new_tattoo_id)
+    tmp_path = f"/tmp/tattoo_{new_tattoo_id}"
+    try:
+        webp_content = None
+        webp_filename = None
+        is_image = content_type.startswith("image/")
+        
+        if is_image:
+            t_ref.update({"uploading_status": "build webp"})
+            print("Processing image: converting to WebP and compressing...")
+            img = Image.open(io.BytesIO(content))
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+                print("Converted image to RGB")
+                
+            quality = 90
+            print(f"Original image size: {original_size} bytes")
+            # Iterate to compress under 64KB
+            while True:
+                out_io = io.BytesIO()
+                img.save(out_io, format="WEBP", quality=quality)
+                temp_webp = out_io.getvalue()
+                print(f"Compressed image size: {len(temp_webp)} bytes")
+                
+                if len(temp_webp) <= 65536 or quality <= 10:
+                    webp_content = temp_webp
+                    break
+                quality -= 10
+                
+            # If still over 64KB at quality 10, resize the image dimensions
+            if len(webp_content) > 65536:
+                print(f"resizing...")
+                while len(webp_content) > 65536:
+                    width, height = img.size
+                    img = img.resize((int(width * 0.8), int(height * 0.8)), Image.Resampling.LANCZOS)
+                    out_io = io.BytesIO()
+                    img.save(out_io, format="WEBP", quality=10)
+                    webp_content = out_io.getvalue()
+                    print(f"Resized image size: {len(webp_content)} bytes")
+                    
+            webp_filename = f"{new_tattoo_id}_compressed.webp"
+            
+        # The file we actually tattoo on Solana
+        tattoo_content = webp_content if is_image else content
+        
+        with open(tmp_path, "wb") as f:
+            f.write(tattoo_content)
+            print(f"Saved temporary file to {tmp_path}")
+
+        vaultsage_files = []
+        
+        vaultsage_path = ""
+        if VAULTSAGE_API_KEY:
+            print(f"Uploading to Vaultsage...")
+            t_ref.update({"uploading_status": "upload to vaultsage"})
+            
+            vaultsage_path = email.replace('@', '_at_').replace('.', '_')
+            target_directory_id = None
+            
+            try:
+                # 1. Fetch directories
+                dirs_res = httpx.get(
+                    "https://api.vaultsage.ai/api/v1/directories/",
+                    headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                    timeout=30.0
+                )
+                if dirs_res.status_code == 200:
+                    dirs_data = dirs_res.json().get("data", [])
+                    for d in dirs_data:
+                        if d.get("directory_name") == vaultsage_path:
+                            target_directory_id = d.get("directory_id")
+                            break
+                            
+                # 2. Create if not found
+                if not target_directory_id:
+                    create_res = httpx.post(
+                        "https://api.vaultsage.ai/api/v1/directories/",
+                        headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                        json={"directory_name": vaultsage_path},
+                        timeout=30.0
+                    )
+                    if create_res.status_code == 200:
+                        target_directory_id = create_res.json().get("directory_id")
+            except Exception as e:
+                print("Failed to get or create VaultSage directory:", e)
+
+            try:
+                upload_url = "https://api.vaultsage.ai/api/v1/files/"
+                if target_directory_id:
+                    upload_url += f"?directory_id={target_directory_id}"
+                    
+                # Upload original file
+                hx1 = httpx.post(
+                    upload_url,
+                    headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                    files=[('files', (filename, content, content_type))],
+                    timeout=360.0
+                )
+                print("VaultSage Original File Backup status:", hx1.status_code)
+                vaultsage_files.append(filename)
+                
+                # Upload webp file individually if it's an image
+                if is_image and webp_content:
+                    hx2 = httpx.post(
+                        upload_url,
+                        headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                        files=[('files', (webp_filename, webp_content, "image/webp"))],
+                        timeout=360.0
+                    )
+                    print("VaultSage WebP File Backup status:", hx2.status_code)
+                    vaultsage_files.append(webp_filename)
+                    
+            except Exception as ve:
+                print("Failed to backup to Vaultsage:", ve)
+                
+        t_ref.update({"uploading_status": "tattoo to blockchain"})
+        signatures = tattoo.upload(tmp_path, new_tattoo_id, email)
+        
+        t_data_updates = {
+            "uploading_status": "done",
+            "filename": filename,
+            "original_filename": filename,
+            "original_size": original_size,
+            "signatures": signatures
+        }
+        if is_image:
+            t_data_updates["webp_filename"] = webp_filename
+            t_data_updates["webp_size"] = len(webp_content)
+        if VAULTSAGE_API_KEY:
+            t_data_updates["vaultsage_files"] = vaultsage_files
+            if vaultsage_path:
+                t_data_updates["vaultsage_path"] = vaultsage_path
+            
+        t_ref.update(t_data_updates)
+        print(f"File tattoo {new_tattoo_id} background processing completed successfully.")
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        t_ref.update({"uploading_status": f"error: {str(e)}"})
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
 @app.post("/api/tattoo/file")
-async def create_file_tattoo(file: UploadFile = File(...), email: str = Depends(verify_token)):
+async def create_file_tattoo(
+    background_tasks: BackgroundTasks, 
+    file: UploadFile = File(...), 
+    email: str = Depends(verify_token)
+):
     if not db:
         raise HTTPException(status_code=500, detail="Database disabled.")
         
@@ -164,108 +322,44 @@ async def create_file_tattoo(file: UploadFile = File(...), email: str = Depends(
     content = await file.read()
     original_size = len(content)
     
-    # 1. Check size limit
+    # 1. Check size limit and file type
     if original_size > 2 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File size exceeds the 2MB limit.")
+        
+    valid_image_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+    if file.content_type not in valid_image_types:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type ({file.content_type}). Only images are allowed.")
     
-    webp_content = None
-    webp_filename = None
-    is_image = file.content_type.startswith("image/")
+    # Pre-allocate the record and deduct points
+    new_points = points - 1
+    doc_ref.update({"points": new_points, "latest_ID": latest_id + 1})
     
-    if is_image:
-        print("Processing image: converting to WebP and compressing...")
-        img = Image.open(io.BytesIO(content))
-        if img.mode != "RGB":
-            img = img.convert("RGB")
-            
-        quality = 90
-        # Iterate to compress under 64KB
-        while True:
-            out_io = io.BytesIO()
-            img.save(out_io, format="WEBP", quality=quality)
-            temp_webp = out_io.getvalue()
-            
-            if len(temp_webp) <= 65536 or quality <= 10:
-                webp_content = temp_webp
-                break
-            quality -= 10
-            
-        # If still over 64KB at quality 10, resize the image dimensions
-        if len(webp_content) > 65536:
-            while len(webp_content) > 65536:
-                width, height = img.size
-                img = img.resize((int(width * 0.8), int(height * 0.8)), Image.Resampling.LANCZOS)
-                out_io = io.BytesIO()
-                img.save(out_io, format="WEBP", quality=10)
-                webp_content = out_io.getvalue()
-                
-        webp_filename = f"{new_tattoo_id}_compressed.webp"
-        
-    # The file we actually tattoo on Solana
-    tattoo_content = webp_content if is_image else content
+    t_ref = doc_ref.collection(u'tattoos').document(new_tattoo_id)
+    t_ref.set({
+        "tattoo_id": new_tattoo_id,
+        "type": "file",
+        "original_filename": file.filename,
+        "uploading_status": "starting",
+        "timestamp": datetime.utcnow().isoformat()
+    })
     
-    # Write to temp file for the native utility processing
-    tmp_path = f"/tmp/tattoo_{new_tattoo_id}"
-    with open(tmp_path, "wb") as f:
-        f.write(tattoo_content)
+    # Spawn background task
+    background_tasks.add_task(
+        process_file_upload_worker,
+        content,
+        file.filename,
+        file.content_type,
+        original_size,
+        email,
+        new_tattoo_id,
+        doc_ref
+    )
         
-    try:
-        tattoo.upload(tmp_path, new_tattoo_id, email)
-        
-        vaultsage_files = []
-        original_unique_filename = f"{new_tattoo_id}_{file.filename}"
-        
-        # Attempt Vaultsage Backup
-        if VAULTSAGE_API_KEY:
-            files_map = []
-            files_map.append(('files', (original_unique_filename, content, file.content_type)))
-            vaultsage_files.append(original_unique_filename)
-            
-            if is_image and webp_content:
-                files_map.append(('files', (webp_filename, webp_content, "image/webp")))
-                vaultsage_files.append(webp_filename)
-                
-            try:
-                hx = httpx.post(
-                    "https://api.vaultsage.ai/api/v1/files/",
-                    headers={"X-Api-Key": VAULTSAGE_API_KEY},
-                    files=files_map,
-                    timeout=30.0
-                )
-                print("VaultSage Backup status:", hx.status_code)
-            except Exception as ve:
-                print("Failed to backup to Vaultsage:", ve)
-                
-        new_points = points - 1
-        doc_ref.update({"points": new_points, "latest_ID": latest_id + 1})
-        
-        t_data = {
-            "tattoo_id": new_tattoo_id,
-            "type": "file",
-            "filename": original_unique_filename if VAULTSAGE_API_KEY else file.filename,
-            "original_filename": file.filename,
-            "original_size": original_size,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        if is_image:
-            t_data["webp_filename"] = webp_filename
-            t_data["webp_size"] = len(webp_content)
-        if VAULTSAGE_API_KEY:
-            t_data["vaultsage_files"] = vaultsage_files
-            
-        t_ref = doc_ref.collection(u'tattoos').document(new_tattoo_id)
-        t_ref.set(t_data)
-        
-        return {"success": True, "new_points": new_points}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+    return {"success": True, "new_points": new_points, "tattoo_id": new_tattoo_id}
 
 
 @app.get("/api/tattoo/read/{tattoo_id}")
-def read_tattoo(tattoo_id: str, email: str = Depends(verify_token)):
+def read_tattoo(tattoo_id: str, fallback_solana: bool = False, email: str = Depends(verify_token)):
     if not db:
         raise HTTPException(status_code=500, detail="Database disabled.")
     
@@ -294,43 +388,56 @@ def read_tattoo(tattoo_id: str, email: str = Depends(verify_token)):
         return {"type": "string", "content": text}
         
     elif t_type == "file":
-        # File path from vaultsage
         filename = t_data.get("filename")
-        if not VAULTSAGE_API_KEY:
-            raise HTTPException(status_code=501, detail="File tattoos require Vaultsage API Key to be configured on the server to download.")
+        
+        vaultsage_success = False
+        file_content = None
+        
+        # Try VaultSage first
+        if VAULTSAGE_API_KEY:
+            try:
+                hx = httpx.get(
+                    f"https://api.vaultsage.ai/api/v1/files/search?keyword={filename}",
+                    headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                    timeout=10.0
+                )
+                if hx.status_code == 200:
+                    res_data = hx.json()
+                    items = res_data.get("items", [])
+                    if items:
+                        file_id = items[0]["file_id"]
+                        dl = httpx.post(
+                            "https://api.vaultsage.ai/api/v1/files/download",
+                            headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                            json={"file_ids": [file_id]},
+                            timeout=30.0
+                        )
+                        if dl.status_code == 200:
+                            file_content = dl.content
+                            vaultsage_success = True
+            except Exception as e:
+                print("VaultSage search/download failed:", e)
+
+        # Fallback to Solana if VaultSage failed
+        if not vaultsage_success:
+            if not fallback_solana:
+                # Tell frontend we need user confirmation to proceed with slow fallback
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=202, content={"fallback_needed": True})
             
-        # Search Vaultsage for the file
-        try:
-            hx = httpx.get(
-                f"https://api.vaultsage.ai/api/v1/files/search?keyword={filename}",
-                headers={"X-Api-Key": VAULTSAGE_API_KEY},
-                timeout=10.0
-            )
-            if hx.status_code != 200:
-                raise HTTPException(status_code=502, detail="Failed to search Vaultsage")
-            res_data = hx.json()
-            items = res_data.get("items", [])
-            if not items:
-                raise HTTPException(status_code=404, detail="File could not be found in Vaultsage backups.")
-            file_id = items[0]["file_id"]
-            
-            # Request download URL or binary
-            dl = httpx.post(
-                "https://api.vaultsage.ai/api/v1/files/download",
-                headers={"X-Api-Key": VAULTSAGE_API_KEY},
-                json={"file_ids": [file_id]},
-                timeout=30.0
-            )
-            if dl.status_code != 200:
-                raise HTTPException(status_code=502, detail="Failed to fetch file from Vaultsage")
+            print(f"Falling back to Solana for tattoo {tattoo_id}")
+            signatures = t_data.get("signatures", [])
+            if signatures:
+                file_content_bytes = tattoo.download_by_signatures(signatures)
+            else:
+                file_content_bytes = tattoo.download(tattoo_id, None, email)
                 
-            file_content = dl.content
-            final_filename = filename.split('_', 1)[-1] if '_' in filename else filename
-            return StreamingResponse(io.BytesIO(file_content), media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{final_filename}"'})
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            if not file_content_bytes:
+                raise HTTPException(status_code=404, detail="Failed to retrieve file tattoo from Solana")
+            file_content = file_content_bytes
+                
+        final_filename = filename.split('_', 1)[-1] if '_' in filename else filename
+        return StreamingResponse(io.BytesIO(file_content), media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{final_filename}"'})
 
 
 # Mount static frontend for production serving
