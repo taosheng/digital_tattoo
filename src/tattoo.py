@@ -47,14 +47,16 @@ def get_tx_with_retry(signature, retries=6):
     for attempt in range(retries):
         try:
             # Add delay to avoid hitting limits immediately
-            time.sleep(0.4)
+            time.sleep(0.5)
             return client.get_transaction(signature, max_supported_transaction_version=0).value
         except Exception as e:
+            err_msg = str(e)
             if attempt < retries - 1:
                 wait_time = 2.0 ** attempt
-                print(f"⚠️ Encountered RPC query error or rate limit, waiting {wait_time:.1f} seconds before retrying... ({attempt+1}/{retries})")
+                print(f"⚠️ Error querying tx {signature}: {err_msg[:150]}... waiting {wait_time:.1f}s before retrying... ({attempt+1}/{retries})")
                 time.sleep(wait_time)
             else:
+                print(f"❌ Failed to fetch tx {signature} after {retries} attempts.")
                 raise e
     return None
 
@@ -87,9 +89,11 @@ def send_memo_tx(memo_data, current_idx, total):
     try:
         res = client.send_transaction(txn)
         print(f"Progress ({current_idx}/{total}): {res.value}")
-        time.sleep(0.5)
+        time.sleep(1.0)
+        return str(res.value)
     except Exception as e:
         print(f"Failed to send chunk index {current_idx}: {e}")
+        return None
 
 def upload(file_path, tattoo_id, user_email):
     if not os.path.exists(file_path):
@@ -130,19 +134,23 @@ def upload(file_path, tattoo_id, user_email):
 def upload_string(text, tattoo_id, user_email):
     if len(text) > 500:
         print("Error: String length exceeds limit (500 characters)")
-        return
+        return []
         
     raw_data = base64.b64encode(text.encode('utf-8')).decode('utf-8')
     chunk_size = 800 
     total_chunks = math.ceil(len(raw_data) / chunk_size)
     print(f"Starting string tattoo process... ID: {tattoo_id}, Email: {user_email}, Expected transactions: {total_chunks}")
 
+    signatures = []
     for i in range(total_chunks):
         chunk = raw_data[i*chunk_size : (i+1)*chunk_size]
         memo_data = f"TAO:{user_email}:{tattoo_id}|s|{i+1}|{total_chunks}|{chunk}"
-        send_memo_tx(memo_data, i+1, total_chunks)
+        sig = send_memo_tx(memo_data, i+1, total_chunks)
+        if sig:
+            signatures.append(sig)
 
     print(f"\nString tattoo completed! Unique ID: {tattoo_id}")
+    return signatures
 
 def download(tattoo_id, output_path, user_email):
     print(f"Searching for tattoo ID on blockchain: {tattoo_id} with Email: {user_email}...")
@@ -201,12 +209,15 @@ def download(tattoo_id, output_path, user_email):
                 with open(output_path, "wb") as f:
                     f.write(base64.b64decode(full_b64))
                 print(f"\nFile reconstruction successful! Saved to: {output_path}")
+                return True
             else:
                 try:
                     text = base64.b64decode(full_b64).decode('utf-8')
                     print(f"\n--- 刺青內容 (Tattoo Content) ---\n{text}\n--------------------------------")
-                except:
+                    return text
+                except Exception as e:
                     print("\n⚠️ Data retrieved, but could not be decoded as a UTF-8 String.")
+                    return None
             
             if 0 in chunks:
                 try:
@@ -219,6 +230,51 @@ def download(tattoo_id, output_path, user_email):
             print(f"\nIncomplete data. Need chunks 1~{total_needed}, currently missing parts.")
     else:
         print("\nNo data found for this ID.")
+
+def download_by_signatures(signatures):
+    from solders.signature import Signature
+    chunks = {}
+    total_needed = 0
+    errors = []
+    
+    for sig_str in signatures:
+        try:
+            sig_obj = Signature.from_string(sig_str)
+            tx_res = get_tx_with_retry(sig_obj)
+            if not tx_res:
+                errors.append(f"Transaction {sig_str} returned empty.")
+                continue
+            
+            logs = tx_res.transaction.meta.log_messages
+            for log in logs:
+                if "Program log: Memo" in log:
+                    try:
+                        content = log.split("Memo (len ")[1].split("): ")[1].strip('"')
+                        if content.startswith("TAO:"):
+                            parts = content.split("|")
+                            idx = int(parts[2])
+                            total_n = int(parts[3])
+                            chunks[idx] = parts[4]
+                            total_needed = total_n
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"Error fetching signature {sig_str}: {e}")
+            errors.append(f"Sig {sig_str}: {str(e)}")
+            continue
+
+    if total_needed > 0 and len(chunks) == total_needed:
+        full_b64 = "".join([chunks[i] for i in range(1, total_needed + 1)])
+        try:
+            return base64.b64decode(full_b64).decode('utf-8')
+        except Exception as e:
+            raise Exception(f"Failed to decode base64: {str(e)}")
+            
+    # If we get here, it means we failed to assemble the chunks
+    if errors:
+        raise Exception("Failed to fetch some signatures from Solana RPC:\n" + "\n".join(errors))
+    else:
+        raise Exception(f"Incomplete data. Found {len(chunks)} chunks, needed {total_needed}.")
 
 def list_tattoos(user_email=None):
     print(f"Scanning tattoo records for account {receiver_pub}...")
