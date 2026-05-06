@@ -23,6 +23,8 @@ document.querySelector('#app').innerHTML = `
             <h2 id="user-name">Welcome!</h2>
             <p id="user-email" style="color: var(--text-secondary);"></p>
             <a id="lnk-what-is" href="https://www.5233.space/2026/05/tattoo.html" target="_blank" style="font-size: 0.9em; display: inline-block; margin-top: 5px;">什麼是數位刺青</a>
+            <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
+            <a id="lnk-operate" href="https://github.com/taosheng/digital_tattoo/blob/main/find_your_tattoo_zh_TW.md" target="_blank" style="font-size: 0.9em; display: inline-block; margin-top: 5px;">自己操作區塊鏈</a>
           </div>
           <div class="points-badge">
             <span id="user-points">0</span> Points
@@ -354,6 +356,7 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     document.getElementById('main-title').innerText = "數位刺青";
     document.getElementById('main-subtitle').innerText = "你的資料刺進區塊鏈 永遠不會消失在！";
     if(document.getElementById('lnk-what-is')) document.getElementById('lnk-what-is').innerText = "什麼是數位刺青";
+    if(document.getElementById('lnk-operate')) document.getElementById('lnk-operate').innerText = "自己操作區塊鏈";
     
     if(document.getElementById('lbl-create-string')) document.getElementById('lbl-create-string').innerText = "建立字串刺青";
     if(document.getElementById('lbl-string-msg')) document.getElementById('lbl-string-msg').innerText = "訊息 (最多 500 字元)";
@@ -369,6 +372,7 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     document.getElementById('main-title').innerText = "Digital Tattoo";
     document.getElementById('main-subtitle').innerText = "Permanently immortalize your data on the Blockchain.";
     if(document.getElementById('lnk-what-is')) document.getElementById('lnk-what-is').innerText = "what is digital tattoo";
+    if(document.getElementById('lnk-operate')) document.getElementById('lnk-operate').innerText = "operate Blockchain";
     
     if(document.getElementById('lbl-create-string')) document.getElementById('lbl-create-string').innerText = "Create String Tattoo";
     if(document.getElementById('lbl-string-msg')) document.getElementById('lbl-string-msg').innerText = "Message (Max 500 characters)";

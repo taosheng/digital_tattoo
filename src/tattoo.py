@@ -83,8 +83,12 @@ def send_memo_tx(memo_data, current_idx, total):
         accounts=[]
     )
     
-    msg = Message([ix_cu, ix_transfer, ix_memo], sender_key.pubkey())
-    txn = Transaction([sender_key], msg, recent_blockhash)
+    txn = Transaction.new_signed_with_payer(
+        [ix_cu, ix_transfer, ix_memo],
+        sender_key.pubkey(),
+        [sender_key],
+        recent_blockhash
+    )
     
     try:
         res = client.send_raw_transaction(bytes(txn))
