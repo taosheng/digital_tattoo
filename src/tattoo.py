@@ -60,52 +60,60 @@ def get_tx_with_retry(signature, retries=6):
                 raise e
     return None
 
-def send_memo_tx(memo_data, current_idx, total):
-    recent_blockhash = client.get_latest_blockhash().value.blockhash
+def send_memo_tx(memo_data, current_idx, total, max_retries=5):
+    import random
     
-    # Add Compute Unit limit instruction (600,000 CUs)
-    # Instruction ID 2: SetComputeUnitLimit
-    ix_cu = Instruction(
-        program_id=Pubkey.from_string("ComputeBudget111111111111111111111111111111"),
-        data=bytes([2]) + (600000).to_bytes(4, 'little'),
-        accounts=[]
-    )
-    
-    ix_transfer = transfer(TransferParams(
-        from_pubkey=sender_key.pubkey(), 
-        to_pubkey=receiver_pub, 
-        lamports=1000
-    ))
-    
-    ix_memo = Instruction(
-        program_id=MEMO_PROGRAM_ID, 
-        data=bytes(memo_data, 'utf-8'), 
-        accounts=[]
-    )
-    
-    txn = Transaction.new_signed_with_payer(
-        [ix_cu, ix_transfer, ix_memo],
-        sender_key.pubkey(),
-        [sender_key],
-        recent_blockhash
-    )
-    
-    try:
-        res = client.send_raw_transaction(bytes(txn))
-        sig = res.value
-        print(f"Progress ({current_idx}/{total}): Sent {sig}")
-        
-        # Confirm transaction to ensure it actually landed on the blockchain
-        confirm_res = client.confirm_transaction(sig)
-        if confirm_res.value[0].err:
-            raise Exception(f"Transaction failed on-chain: {confirm_res.value[0].err}")
-        
-        print(f"Progress ({current_idx}/{total}): Confirmed {sig}")
-        time.sleep(0.5)
-        return str(sig)
-    except Exception as e:
-        print(f"Failed to send or confirm chunk index {current_idx}: {e}")
-        return None
+    for attempt in range(max_retries):
+        try:
+            recent_blockhash = client.get_latest_blockhash().value.blockhash
+            
+            # Add Compute Unit limit instruction (600,000 CUs)
+            ix_cu = Instruction(
+                program_id=Pubkey.from_string("ComputeBudget111111111111111111111111111111"),
+                data=bytes([2]) + (600000).to_bytes(4, 'little'),
+                accounts=[]
+            )
+            
+            ix_transfer = transfer(TransferParams(
+                from_pubkey=sender_key.pubkey(), 
+                to_pubkey=receiver_pub, 
+                lamports=1000
+            ))
+            
+            ix_memo = Instruction(
+                program_id=MEMO_PROGRAM_ID, 
+                data=bytes(memo_data, 'utf-8'), 
+                accounts=[]
+            )
+            
+            txn = Transaction.new_signed_with_payer(
+                [ix_cu, ix_transfer, ix_memo],
+                sender_key.pubkey(),
+                [sender_key],
+                recent_blockhash
+            )
+            
+            res = client.send_raw_transaction(bytes(txn))
+            sig = res.value
+            print(f"Progress ({current_idx}/{total}): Sent {sig}")
+            
+            # Confirm transaction to ensure it actually landed on the blockchain
+            confirm_res = client.confirm_transaction(sig)
+            if confirm_res.value[0].err:
+                raise Exception(f"Transaction failed on-chain: {confirm_res.value[0].err}")
+            
+            print(f"Progress ({current_idx}/{total}): Confirmed {sig}")
+            time.sleep(0.5)
+            return str(sig)
+        except Exception as e:
+            print(f"Attempt {attempt+1}/{max_retries} failed for chunk {current_idx}: {e}")
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 2 + random.uniform(0, 2)
+                print(f"Retrying in {wait_time:.1f}s...")
+                time.sleep(wait_time)
+            else:
+                print(f"Failed to send or confirm chunk index {current_idx} after {max_retries} attempts")
+                return None
 
 def upload(file_path, tattoo_id, user_email):
     if not os.path.exists(file_path):

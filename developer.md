@@ -13,6 +13,44 @@ Once a transaction is confirmed, the data becomes a permanent part of the Solana
    * **For Files (`f`):** `TAO:<user-email>:<ID>|f|<index>|<total>|<Base64_Payload>`
      * *Note on File indexing:* For file uploads, index `0` is reserved exclusively for the file's metadata string (e.g., file name, file size), encoded in Base64. The actual file content starts from index `1`.
 
+### Memo Format Examples
+
+#### String Tattoo Example
+
+A user with email `taosheng.chen@gmail.com` tattoos the string:
+```
+Build and lead engineering teams to achieve organizational goals. 日本語を独学中
+```
+
+The system encodes the text as **Base64(UTF-8)** and writes the following memo to the Solana blockchain:
+
+```
+TAO:taosheng.chen@gmail.com:106|s|1|1|QnVpbGQgYW5kIGxlYWQgZW5naW5lZXJpbmcgdGVhbXMgdG8gYWNoaWV2ZSBvcmdhbml6YXRpb25hbCBnb2Fscy4g5pel5pys6Kqe44KS54us5a2m5Lit
+```
+
+| Field | Value | Description |
+|-------|-------|-------------|
+| Prefix | `TAO:` | Protocol identifier |
+| Email | `taosheng.chen@gmail.com` | Owner of the tattoo |
+| ID | `106` | Unique tattoo sequence ID |
+| Type | `s` | String tattoo |
+| Index | `1` | Current chunk (1-based for string data) |
+| Total | `1` | Total number of chunks |
+| Payload | `QnVpbGQgYW5k...` | Base64-encoded UTF-8 text |
+
+**Encoding pipeline:** `original text` → `UTF-8 bytes` → `Base64 string` → embedded in memo
+
+#### File Tattoo Example
+
+A user uploads an image `photo.jpg` (compressed to WebP, ~60KB). The system:
+
+1. **Chunk 0 (metadata):** `TAO:user@gmail.com:107|f|0|82|eyJuYW1lIjoicGhvdG8ud2VicCIsInNpemUiOjYxNDQwfQ==`
+   - Payload decodes to: `{"name":"photo.webp","size":61440}`
+2. **Chunk 1–82 (file data):** `TAO:user@gmail.com:107|f|1|82|<800 bytes of Base64-encoded binary>`
+   - Each chunk contains up to 800 characters of Base64-encoded file content
+
+**Encoding pipeline:** `binary file` → `Base64 string` → split into 800-char chunks → each chunk embedded in a memo
+
 ## User & System Flow
 * Users can only sign up and log in via Gmail.
 * Upon a user's first sign-up, the system creates a user document in Firestore containing basic user information: user name, Gmail address, Google ID, initial sign-up timestamp, last login timestamp, and user points (default is 5).

@@ -142,13 +142,43 @@ async function loadTattoos() {
              }
          }
            
+         let actionButtons = '';
+         const langText = document.getElementById('lang-select').value;
+         
+         const txBtnText = langText === 'zh' ? "想要自己從區塊鏈下載" : "Download from Blockchain yourself";
+         const sigsJson = t.signatures ? JSON.stringify(t.signatures).replace(/'/g, "\\'").replace(/"/g, "&quot;") : '[]';
+         const txButton = (t.signatures && t.signatures.length > 0 && (!t.uploading_status || t.uploading_status === 'done'))
+           ? `<button class="action-btn" onclick="showTransactions(${sigsJson}, event)" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.4); color: white; border-radius: 4px; cursor: pointer;">${txBtnText}</button>`
+           : '';
+
+         if (t.type === 'string') {
+             const btnText = langText === 'zh' ? "查看文字" : "View String";
+             actionButtons = `
+               <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                   <button class="action-btn" onclick="downloadTattoo('${t.tattoo_id}', false, event)" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(255,255,255,0.85); border: 1px solid var(--glass-border); color: #111; border-radius: 4px; cursor: pointer; font-weight: 500;">${btnText}</button>
+                   ${txButton}
+               </div>
+             `;
+         } else {
+             const cacheBtnText = langText === 'zh' ? "下載檔案" : "Download File";
+             actionButtons = `
+               <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                   <button class="action-btn" onclick="downloadTattoo('${t.tattoo_id}', false, event)" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(255,255,255,0.85); border: 1px solid var(--glass-border); color: #111; border-radius: 4px; cursor: pointer; font-weight: 500;">${cacheBtnText}</button>
+                   ${txButton}
+               </div>
+             `;
+         }
+
          item.innerHTML = `
-           <div style="cursor: pointer; width: 100%;" onclick="downloadTattoo('${t.tattoo_id}')">
-             ${typeBadge} 
-             <strong style="margin-left: 0.5rem;">${displayTitle}</strong>
-             ${statusHtml}
-             <br/>
-             <small style="color: var(--text-secondary)">${new Date(t.timestamp).toLocaleString()}</small>
+           <div style="width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+             <div style="flex: 1; min-width: 0;">
+               ${typeBadge} 
+               <strong style="margin-left: 0.5rem;">${displayTitle}</strong>
+               ${statusHtml}
+               <br/>
+               <small style="color: var(--text-secondary)">${new Date(t.timestamp).toLocaleString()}</small>
+             </div>
+             ${actionButtons}
            </div>
          `;
          listEl.appendChild(item);
@@ -179,11 +209,13 @@ async function loadTattoos() {
   }
 }
 
-window.downloadTattoo = async (id, forceFallback = false) => {
+window.downloadTattoo = async (id, forceFallback = false, e = null) => {
+  if(e) e.stopPropagation();
+  const lang = document.getElementById('lang-select').value;
   if (forceFallback) {
-    showOverlay("Gathering from blockchain... This will take a few minutes.");
+    showOverlay(lang === 'zh' ? "正在從區塊鏈收集資料中，請耐心等候..." : "Gathering data from blockchain, please wait...");
   } else {
-    showOverlay("Retrieving tattoo data...");
+    showOverlay(lang === 'zh' ? "取得刺青資料中..." : "Retrieving tattoo data...");
   }
   
   try {
@@ -195,14 +227,13 @@ window.downloadTattoo = async (id, forceFallback = false) => {
     if (res.status === 202) {
        const data = await res.json();
        if (data.fallback_needed) {
-           const lang = document.getElementById('lang-select').value;
+           hideOverlay();
            const msg = lang === 'zh' 
-             ? "VaultSage 備份不存在。將從 Solana 區塊鏈上收集所有資料，這可能需要幾分鐘的時間。確定要繼續嗎？"
-             : "VaultSage backup not found. The system will gather all chunks directly from the Solana blockchain. This may take a few minutes. Continue?";
+             ? "這需要數十分鐘的時間，確定要繼續嗎？"
+             : "This will take several minutes. Are you sure you want to continue?";
            if (confirm(msg)) {
                return window.downloadTattoo(id, true);
            } else {
-               hideOverlay();
                return;
            }
        }
@@ -225,14 +256,26 @@ window.downloadTattoo = async (id, forceFallback = false) => {
                 const parts = disposition.split('filename=');
                 filename = parts[1].replace(/["']/g, ""); 
             }
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
+            const blobUrl = window.URL.createObjectURL(blob);
+            const lang = document.getElementById('lang-select').value;
+            const closeText = lang === 'zh' ? '關閉' : 'Close';
+            const saveText = lang === 'zh' ? '儲存檔案' : 'Save File';
+            
+            const modal = document.createElement('div');
+            modal.id = 'img-preview-modal';
+            modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:1000;display:flex;align-items:center;justify-content:center;';
+            modal.innerHTML = `
+              <div style="background: var(--bg-dark, #1a1a2e); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 24px; max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column; align-items: center; gap: 16px;">
+                <img src="${blobUrl}" style="max-width: 80vw; max-height: 65vh; object-fit: contain; border-radius: 8px;" alt="${filename}" />
+                <div style="color: var(--text-secondary, #999); font-size: 0.85rem;">${filename}</div>
+                <div style="display: flex; gap: 12px;">
+                  <a href="${blobUrl}" download="${filename}" style="padding: 6px 16px; background: rgba(139,92,246,0.3); border: 1px solid rgba(139,92,246,0.5); color: white; border-radius: 6px; cursor: pointer; text-decoration: none; font-size: 0.9rem;">${saveText}</a>
+                  <button onclick="document.getElementById('img-preview-modal').remove()" style="padding: 6px 16px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 6px; cursor: pointer;">${closeText}</button>
+                </div>
+              </div>
+            `;
+            document.body.appendChild(modal);
+            modal.addEventListener('click', (ev) => { if(ev.target === modal) modal.remove(); });
         } else {
             alert("File retrieval failed.");
         }
@@ -242,6 +285,42 @@ window.downloadTattoo = async (id, forceFallback = false) => {
   } finally {
     hideOverlay();
   }
+};
+
+window.showTransactions = (sigs, e = null) => {
+  if(e) e.stopPropagation();
+  const lang = document.getElementById('lang-select').value;
+  const title = lang === 'zh' ? '區塊鏈交易紀錄' : 'Blockchain Transactions';
+  const closeText = lang === 'zh' ? '關閉' : 'Close';
+  const tutorialText = lang === 'zh' ? '如何在區塊鏈組合出自己的刺青檔案' : 'How to assemble your tattoo file from blockchain';
+  const parsed = typeof sigs === 'string' ? JSON.parse(sigs) : sigs;
+  
+  const linksHtml = parsed.map((sig, i) => {
+    const shortSig = sig.substring(0, 16) + '...' + sig.substring(sig.length - 8);
+    return `<div style="margin: 6px 0;">
+      <span style="color: var(--text-secondary); font-size: 0.85rem;">#${i+1}</span>
+      <a href="https://explorer.solana.com/tx/${sig}?cluster=devnet" target="_blank" 
+         style="margin-left: 8px; color: #8b5cf6; word-break: break-all; font-size: 0.85rem;">${shortSig}</a>
+    </div>`;
+  }).join('');
+  
+  const modal = document.createElement('div');
+  modal.id = 'tx-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background: var(--bg-dark, #1a1a2e); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 70vh; overflow-y: auto;">
+      <h3 style="color: white; margin: 0 0 16px 0;">${title} (${parsed.length})</h3>
+      <div style="margin-bottom: 16px;">
+        <a href="https://github.com/taosheng/digital_tattoo/blob/main/find_your_tattoo_zh_TW.md" target="_blank" style="color: #8b5cf6; font-size: 0.9rem;">${tutorialText}</a>
+      </div>
+      ${linksHtml}
+      <div style="margin-top: 16px; text-align: right;">
+        <button onclick="document.getElementById('tx-modal').remove()" style="padding: 6px 16px; background: rgba(139,92,246,0.3); border: 1px solid rgba(139,92,246,0.5); color: white; border-radius: 6px; cursor: pointer;">${closeText}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', (ev) => { if(ev.target === modal) modal.remove(); });
 };
 
 // Event Listeners
@@ -287,8 +366,8 @@ document.getElementById('file-form').addEventListener('submit', async (e) => {
 
   const lang = document.getElementById('lang-select').value;
   const msg = lang === 'zh' 
-    ? "你確定嗎？一旦確認，刺青將永遠存在於區塊鏈上，且無法消失！" 
-    : "Are you sure? Once you confirm, the tattoo will NEVER disappear! It will be there forever.";
+    ? "你確定嗎？一旦確認，刺青將永遠存在於區塊鏈上，且無法消失！\n\n注意！圖像檔案刺青需要產生成千上百個交易，因此至少需要花2小時" 
+    : "Are you sure? Once you confirm, the tattoo will NEVER disappear! It will be there forever.\n\nNote: Image file tattooing requires hundreds of transactions and will take at least 2 hours.";
   if (!confirm(msg)) return;
 
   const fileInput = document.getElementById('file-input');

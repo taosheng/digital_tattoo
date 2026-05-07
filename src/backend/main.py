@@ -196,7 +196,7 @@ def process_file_upload_worker(
                     webp_content = out_io.getvalue()
                     print(f"Resized image size: {len(webp_content)} bytes")
                     
-            webp_filename = f"{new_tattoo_id}_compressed.webp"
+            webp_filename = f"{filename}_.webp"
             
         # The file we actually tattoo on Solana
         tattoo_content = webp_content if is_image else content
@@ -284,10 +284,12 @@ def process_file_upload_worker(
         if is_image:
             t_data_updates["webp_filename"] = webp_filename
             t_data_updates["webp_size"] = len(webp_content)
-        if VAULTSAGE_API_KEY:
+        if VAULTSAGE_API_KEY and vaultsage_path:
+            t_data_updates["vaultsage_path"] = vaultsage_path
             t_data_updates["vaultsage_files"] = vaultsage_files
-            if vaultsage_path:
-                t_data_updates["vaultsage_path"] = vaultsage_path
+            t_data_updates["vaultsage_original_path"] = f"{vaultsage_path}/{filename}"
+            if is_image and webp_filename:
+                t_data_updates["vaultsage_webp_path"] = f"{vaultsage_path}/{webp_filename}"
             
         t_ref.update(t_data_updates)
         print(f"File tattoo {new_tattoo_id} background processing completed successfully.")
@@ -389,40 +391,46 @@ def read_tattoo(tattoo_id: str, fallback_solana: bool = False, email: str = Depe
         
     elif t_type == "file":
         filename = t_data.get("filename")
+        webp_filename = t_data.get("webp_filename")
         
         vaultsage_success = False
         file_content = None
+        download_filename = webp_filename or filename
         
-        # Try VaultSage first
-        if VAULTSAGE_API_KEY:
-            try:
-                hx = httpx.get(
-                    f"https://api.vaultsage.ai/api/v1/files/search?keyword={filename}",
-                    headers={"X-Api-Key": VAULTSAGE_API_KEY},
-                    timeout=10.0
-                )
-                if hx.status_code == 200:
-                    res_data = hx.json()
-                    items = res_data.get("items", [])
-                    if items:
-                        file_id = items[0]["file_id"]
-                        dl = httpx.post(
-                            "https://api.vaultsage.ai/api/v1/files/download",
-                            headers={"X-Api-Key": VAULTSAGE_API_KEY},
-                            json={"file_ids": [file_id]},
-                            timeout=30.0
-                        )
-                        if dl.status_code == 200:
-                            file_content = dl.content
-                            vaultsage_success = True
-            except Exception as e:
-                print("VaultSage search/download failed:", e)
+        # Try VaultSage first — try WebP, then fall back to original file
+        if VAULTSAGE_API_KEY and not fallback_solana:
+            # Attempt 1: try the WebP (reduced size) version
+            for try_name in [webp_filename, filename]:
+                if not try_name or vaultsage_success:
+                    continue
+                try:
+                    hx = httpx.get(
+                        f"https://api.vaultsage.ai/api/v1/files/search?keyword={try_name}",
+                        headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                        timeout=10.0
+                    )
+                    if hx.status_code == 200:
+                        res_data = hx.json()
+                        files_list = res_data.get("files", [])
+                        if files_list:
+                            file_id = files_list[0]["id"]
+                            dl = httpx.post(
+                                "https://api.vaultsage.ai/api/v1/files/download",
+                                headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                                json={"file_ids": [file_id]},
+                                timeout=30.0
+                            )
+                            if dl.status_code == 200:
+                                file_content = dl.content
+                                vaultsage_success = True
+                                download_filename = try_name
+                                print(f"VaultSage download success: {try_name}")
+                except Exception as e:
+                    print(f"VaultSage search/download failed for {try_name}:", e)
 
         # Fallback to Solana if VaultSage failed
         if not vaultsage_success:
             if not fallback_solana:
-                # Tell frontend we need user confirmation to proceed with slow fallback
-                from fastapi.responses import JSONResponse
                 return JSONResponse(status_code=202, content={"fallback_needed": True})
             
             print(f"Falling back to Solana for tattoo {tattoo_id}")
@@ -435,9 +443,48 @@ def read_tattoo(tattoo_id: str, fallback_solana: bool = False, email: str = Depe
             if not file_content_bytes:
                 raise HTTPException(status_code=404, detail="Failed to retrieve file tattoo from Solana")
             file_content = file_content_bytes
-                
-        final_filename = filename.split('_', 1)[-1] if '_' in filename else filename
-        return StreamingResponse(io.BytesIO(file_content), media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{final_filename}"'})
+            download_filename = webp_filename or filename
+            
+            # Cache to VaultSage for next time
+            if VAULTSAGE_API_KEY and file_content:
+                try:
+                    vaultsage_path = email.replace('@', '_at_').replace('.', '_')
+                    target_directory_id = None
+                    dirs_res = httpx.get(
+                        "https://api.vaultsage.ai/api/v1/directories/",
+                        headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                        timeout=30.0
+                    )
+                    if dirs_res.status_code == 200:
+                        for d in dirs_res.json().get("data", []):
+                            if d.get("directory_name") == vaultsage_path:
+                                target_directory_id = d.get("directory_id")
+                                break
+                    if not target_directory_id:
+                        cr = httpx.post(
+                            "https://api.vaultsage.ai/api/v1/directories/",
+                            headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                            json={"directory_name": vaultsage_path},
+                            timeout=30.0
+                        )
+                        if cr.status_code == 200:
+                            target_directory_id = cr.json().get("directory_id")
+                    
+                    upload_url = "https://api.vaultsage.ai/api/v1/files/"
+                    if target_directory_id:
+                        upload_url += f"?directory_id={target_directory_id}"
+                    
+                    cache_res = httpx.post(
+                        upload_url,
+                        headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                        files=[('files', (download_filename, file_content, "application/octet-stream"))],
+                        timeout=120.0
+                    )
+                    print(f"Cached to VaultSage: {download_filename}, status: {cache_res.status_code}")
+                except Exception as cache_err:
+                    print(f"Failed to cache to VaultSage: {cache_err}")
+            
+        return StreamingResponse(io.BytesIO(file_content), media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{download_filename}"'})
 
 
 # Mount static frontend for production serving
