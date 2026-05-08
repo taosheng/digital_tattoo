@@ -47,10 +47,10 @@ document.querySelector('#app').innerHTML = `
 
         <!-- File Tattoo -->
         <div class="glass-panel">
-          <h2 id="lbl-create-file">建立檔案刺青</h2>
+          <h2 id="lbl-create-file">建立圖像刺青</h2>
           <form id="file-form">
             <div class="form-group">
-              <label id="lbl-file-msg">檔案 (最大 10MB。圖片將自動壓縮)</label>
+              <label id="lbl-file-msg">圖檔 (最大 10MB。圖片將自動壓縮)</label>
               <input type="file" id="file-input" required />
             </div>
             <button type="submit" id="btn-file">刺進區塊鏈</button>
@@ -125,8 +125,8 @@ async function loadTattoos() {
          const item = document.createElement('div');
          item.className = 'tattoo-item';
          const typeBadge = t.type === 'string' 
-           ? '<span class="badge string">STRING</span>' 
-           : '<span class="badge file">FILE</span>';
+           ? '<span class="badge string">文字</span>' 
+           : '<span class="badge file">圖檔</span>';
            
          const displayTitle = t.type === 'string' 
            ? (t.preview || "String Tattoo " + t.tattoo_id)
@@ -454,8 +454,8 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lbl-string-msg')) document.getElementById('lbl-string-msg').innerText = "訊息 (最多 1000 字元)";
     if(document.getElementById('btn-string')) document.getElementById('btn-string').innerText = "刺進區塊鏈";
     
-    if(document.getElementById('lbl-create-file')) document.getElementById('lbl-create-file').innerText = "建立檔案刺青";
-    if(document.getElementById('lbl-file-msg')) document.getElementById('lbl-file-msg').innerText = "檔案 (最大 10MB。圖片將自動壓縮)";
+    if(document.getElementById('lbl-create-file')) document.getElementById('lbl-create-file').innerText = "建立圖像刺青";
+    if(document.getElementById('lbl-file-msg')) document.getElementById('lbl-file-msg').innerText = "圖檔 (最大 10MB。圖片將自動壓縮)";
     if(document.getElementById('btn-file')) document.getElementById('btn-file').innerText = "刺進區塊鏈";
     
     if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "你的刺青";

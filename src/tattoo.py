@@ -44,13 +44,16 @@ AR_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB limit for Arweave file tattoos
 try:
     from arweave.arweave_lib import Wallet as ArWallet
     from arweave.arweave_lib import Transaction as ArTransaction
+    from arweave.transaction_uploader import get_uploader as ar_get_uploader
     ar_key_path = os.getenv("AR_SENDER_KEY", "")
     if ar_key_path and os.path.exists(ar_key_path):
         AR_WALLET = ArWallet(ar_key_path)
         print(f"Arweave wallet loaded: {AR_WALLET.address}")
 except ImportError:
+    ar_get_uploader = None
     pass
 except Exception as e:
+    ar_get_uploader = None
     print(f"Warning: Could not load Arweave wallet: {e}")
 
 def check_balances():
@@ -462,40 +465,81 @@ def ar_fetch_data(tx_id):
 
 def ar_send_tx(data_bytes, tags, description="", max_retries=5):
     """Send a single Arweave transaction with data and tags. Returns tx_id string.
+    Uses chunked upload for large data (>2MB) to avoid HTTP 413 errors.
     Includes retry logic to handle rate limits from the Arweave gateway."""
     import random
+    import requests
     
     if not AR_WALLET:
         raise Exception("Arweave wallet not loaded. Check AR_SENDER_KEY in .env")
     
+    data_size = len(data_bytes)
+    # Arweave gateway nginx rejects large POST bodies; base64 encoding inflates size further.
+    # Use chunked upload for anything > 50KB to be safe.
+    use_chunked = data_size > 50 * 1024
+    
     for attempt in range(max_retries):
         try:
-            tx = ArTransaction(AR_WALLET, data=data_bytes)
-            for k, v in tags.items():
-                tx.add_tag(k, v)
-            
-            tx.sign()
-            
-            # Manual send with response checking (library silently ignores errors)
-            import requests
-            url = f"{tx.api_url}/tx"
-            headers = {'Content-Type': 'application/json', 'Accept': 'text/plain'}
-            response = requests.post(url, data=tx.json_data, headers=headers, timeout=30)
-            
-            if response.status_code == 200:
-                tx_id = tx.id
-                print(f"Arweave TX sent and accepted: {tx_id} {description}")
+            if use_chunked:
+                # Chunked upload: write data to temp file, use TransactionUploader
+                import tempfile
                 
-                # Verify TX status
-                status_res = requests.get(f"{tx.api_url}/tx/{tx_id}/status", timeout=10)
-                if status_res.status_code == 200:
-                    print(f"  ✅ TX confirmed on-chain")
-                elif status_res.status_code == 202 or status_res.text == "Pending":
+                tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".tattoo_tmp")
+                tmp_file.write(data_bytes)
+                tmp_file_path = tmp_file.name
+                tmp_file.close()
+                
+                try:
+                    fh = open(tmp_file_path, "rb", buffering=0)
+                    tx = ArTransaction(AR_WALLET, file_handler=fh, file_path=tmp_file_path)
+                    for k, v in tags.items():
+                        tx.add_tag(k, v)
+                    tx.sign()
+                    
+                    uploader = ar_get_uploader(tx, fh)
+                    
+                    print(f"  Chunked upload: {uploader.total_chunks} chunks for {data_size} bytes")
+                    while not uploader.is_complete:
+                        uploader.upload_chunk()
+                        print(f"  Uploaded chunk {uploader.uploaded_chunks}/{uploader.total_chunks} ({uploader.pct_complete}%)")
+                    
+                    fh.close()
+                    tx_id = tx.id
+                    print(f"Arweave TX sent and accepted (chunked): {tx_id} {description}")
                     print(f"  ⏳ TX accepted, pending confirmation (~10-20 min for indexing)")
-                
-                return tx_id
+                    return tx_id
+                finally:
+                    if os.path.exists(tmp_file_path):
+                        os.remove(tmp_file_path)
             else:
-                raise Exception(f"Arweave node rejected TX: HTTP {response.status_code} - {response.text[:200]}")
+                # Small data: inline POST
+                tx = ArTransaction(AR_WALLET, data=data_bytes)
+                for k, v in tags.items():
+                    tx.add_tag(k, v)
+                
+                tx.sign()
+                
+                url = f"{tx.api_url}/tx"
+                headers = {'Content-Type': 'application/json', 'Accept': 'text/plain'}
+                response = requests.post(url, data=tx.json_data, headers=headers, timeout=30)
+                
+                if response.status_code == 200:
+                    tx_id = tx.id
+                    print(f"Arweave TX sent and accepted: {tx_id} {description}")
+                    
+                    # Verify TX status
+                    try:
+                        status_res = requests.get(f"{tx.api_url}/tx/{tx_id}/status", timeout=10)
+                        if status_res.status_code == 200:
+                            print(f"  ✅ TX confirmed on-chain")
+                        elif status_res.status_code == 202 or status_res.text == "Pending":
+                            print(f"  ⏳ TX accepted, pending confirmation (~10-20 min for indexing)")
+                    except Exception:
+                        print(f"  ⏳ TX accepted (status check skipped)")
+                    
+                    return tx_id
+                else:
+                    raise Exception(f"Arweave node rejected TX: HTTP {response.status_code} - {response.text[:200]}")
         except (UnboundLocalError, Exception) as e:
             err_msg = str(e)
             # UnboundLocalError = arweave.net/price API failed (rate limit / network)
