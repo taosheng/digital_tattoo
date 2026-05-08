@@ -1,44 +1,112 @@
-# How to Find Your Digital Tattoos on Solana (Self-Serve Guide)
+# How to Find Your Digital Tattoos on the Blockchain (Self-Serve Guide)
 
-Since your digital tattoos are permanently etched into the Solana blockchain, you never have to worry about our servers shutting down! You can independently retrieve and reconstruct your data anytime, from anywhere, without using our application or backend.
+Your digital tattoos are permanently recorded on the blockchain. Even if our servers shut down, you can always independently retrieve your data using public tools — no application or backend needed.
 
-## 1. Locate the Blockchain Records
-All digital tattoos are stored securely inside transaction "memos" under a designated vault wallet address on the Solana network. 
+> **Which blockchain is my tattoo on?**
+> - Tattoos created **after May 8, 2026 10:00 AM (UTC+8)** → stored on **Arweave** (see Section A below)
+> - Tattoos created **before May 8, 2026 10:00 AM (UTC+8)** → stored on **Solana Devnet** (see Section B below)
+
+---
+
+# Section A — Arweave (Default, after May 8 2026)
+
+Since May 8, 2026, all new tattoos are stored on the **Arweave** permanent storage network. Each tattoo is a single transaction — no chunking required.
+
+## A1. Locate Your Transaction
+
+1. Go to a public Arweave explorer such as [ViewBlock](https://viewblock.io/arweave) or [ArScan](https://arscan.io).
+2. Search by your **Transaction ID** (shown in the "想要自己從區塊鏈下載" section of your tattoo record).
+3. You will see your transaction with tags like `App-Name: DigitalTattoo`, `Tattoo-ID`, `Tattoo-Email`, `Tattoo-Type`, etc.
+
+Alternatively, query via Arweave GraphQL endpoint (`https://arweave-search.goldsky.com/graphql`):
+```graphql
+{
+  transactions(
+    tags: [
+      { name: "App-Name", values: ["DigitalTattoo"] },
+      { name: "Tattoo-Email", values: ["your-email@gmail.com"] }
+    ],
+    first: 100
+  ) {
+    edges {
+      node {
+        id
+        tags { name value }
+      }
+    }
+  }
+}
+```
+
+## A2. Retrieve a String Tattoo
+
+String tattoos on Arweave are stored as **raw UTF-8 text** in the transaction data (not Base64).
+
+**Steps:**
+1. Find your Transaction ID from the explorer or GraphQL query.
+2. Open `https://arweave.net/<your-transaction-id>` in a browser.
+3. The page will display your original text directly!
+
+## A3. Retrieve a File Tattoo
+
+File tattoos on Arweave are stored as **raw binary data** in a single transaction.
+
+**Steps:**
+1. Find your Transaction ID.
+2. Download the file from `https://arweave.net/<your-transaction-id>`.
+3. The original filename is stored in the transaction tag `Tattoo-Filename`. Rename the downloaded file accordingly.
+
+## A4. Understanding Arweave Transaction Tags
+
+Each tattoo transaction includes these searchable tags:
+
+| Tag | Description | Example |
+|-----|-------------|---------|
+| `App-Name` | Always "DigitalTattoo" | `DigitalTattoo` |
+| `Tattoo-Protocol` | Protocol identifier | `TAO` |
+| `Tattoo-ID` | Unique tattoo sequence number | `107` |
+| `Tattoo-Type` | `s` for string, `f` for file | `s` |
+| `Tattoo-Email` | Owner email | `user@gmail.com` |
+| `Tattoo-Filename` | Original filename (file tattoos only) | `photo.jpg` |
+| `Tattoo-FileSize` | File size in bytes (file tattoos only) | `133640` |
+| `Content-Type` | MIME type | `text/plain; charset=utf-8` |
+
+---
+
+# Section B — Solana Devnet (Legacy, before May 8 2026)
+
+Tattoos created before May 8, 2026 are stored on the **Solana Devnet** using the SPL Memo Program.
+
+## B1. Locate the Blockchain Records
 1. Use any public block explorer such as [Solana Explorer](https://explorer.solana.com) or [Solscan](https://solscan.io).
-2. Enter the official centralized Receiver Wallet Address: `DHTjb119U6MdpHLHVfqn2bddgJWuWi4c3e84WjXzVBZF`.
-3. Navigate to the **Transactions** history tab.
-4. Look through the transaction logs and inspect the "Program Instructions" specifically for **SPL Memo Program** entries.
+2. Enter the official Receiver Wallet Address: `DHTjb119U6MdpHLHVfqn2bddgJWuWi4c3e84WjXzVBZF`.
+3. **Important:** Make sure to select **Devnet** cluster in the explorer settings.
+4. Navigate to the **Transactions** history tab.
+5. Look through the transaction logs for **SPL Memo Program** entries.
 
-## 2. Identify Your Data
-Every single chunk of data you've uploaded is explicitly tagged with your email.
-Open the Memo logs and search for your email. You will find entries starting with:
+## B2. Identify Your Data
+Every chunk is tagged with your email. Search for entries starting with:
 `TAO:your-email@gmail.com:<Unique_ID>|...`
 
-The characters exactly following the `|` pipe define what kind of tattoo it is:
-- `|s|` represents a **String Tattoo**
-- `|f|` represents a **File Tattoo**
+- `|s|` = **String Tattoo**
+- `|f|` = **File Tattoo**
 
----
-
-## 3. Reconstructing a String Tattoo (`s`)
-String tattoos normally take up exactly 1 transaction chunk. The format looks natively like this:
-`TAO:your-email@gmail.com:<Unique_ID>|s|<index>|<total>|<Base64_Payload>`
+## B3. Reconstructing a String Tattoo (`s`)
+Format: `TAO:your-email@gmail.com:<Unique_ID>|s|<index>|<total>|<Base64_Payload>`
 
 **Steps:**
-1. Locate your Log Memo.
-2. Copy the final section of the text, which is the `<Base64_Payload>`.
-3. Paste that copied string into any online standard Base64 string decoder (like `base64decode.org`). 
-4. The decoded result is your original plain-text UTF-8 string!
+1. Locate your Memo log entry.
+2. Copy the `<Base64_Payload>` portion.
+3. Paste it into any Base64 decoder (e.g. `base64decode.org`).
+4. The decoded result is your original UTF-8 text!
 
----
-
-## 4. Reconstructing a File Tattoo (`f`)
-Because Solana transactions have a strict size limit, larger files are "sharded" (split) into multiple sequenced chunks. The format is similar:
-`TAO:your-email@gmail.com:<Unique_ID>|f|<index>|<total>|<Base64_Payload>`
+## B4. Reconstructing a File Tattoo (`f`)
+Because Solana transactions have strict size limits, files are split into sequential chunks.
+Format: `TAO:your-email@gmail.com:<Unique_ID>|f|<index>|<total>|<Base64_Payload>`
 
 **Steps:**
-1. **Index 0 (Metadata):** Find the log where `<index>` is exactly `0`. The Payload here does **not** contain your file. Instead, decoding this Base64 payload will yield a JSON text structure detailing your original file's native Name and Size (e.g. `{"name": "photo.jpg", "size": 15000}`).
-2. **Index 1 to Total (File Data):** Find all remaining logs sharing the exact same `<Unique_ID>`. Their indices will range from `1` entirely up to the number listed in `<total>`.
-3. **Concatenate:** Copy the Base64 payloads from chunks `1`, `2`, `3` ... sequentially. Paste them together into one massive, continuous string block (make absolutely sure there are no spaces or breaks in between).
-4. **Decode:** Pass this massive joined Base64 block into a Base64-to-File decoder tool or script. 
-5. Save the output binary stream using the exact original filename and extension you discovered back in Index 0!
+1. **Index 0 (Metadata):** Find the log where `<index>` is `0`. Decode its Base64 payload to get a JSON with the original filename and size (e.g. `{"name": "photo.jpg", "size": 15000}`).
+2. **Index 1 to Total:** Find all remaining logs with the same `<Unique_ID>`. Their indices range from `1` to the `<total>` number.
+3. **Concatenate:** Copy the Base64 payloads from chunks `1`, `2`, `3`... sequentially into one continuous string (no spaces or line breaks).
+4. **Decode:** Pass the joined Base64 string into a Base64-to-file decoder tool.
+5. Save the output using the filename from Index 0.

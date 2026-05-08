@@ -121,6 +121,9 @@ def create_string_tattoo(req: StringTattooRequest, email: str = Depends(verify_t
     if not db:
         raise HTTPException(status_code=500, detail="Database disabled.")
     
+    if len(req.string_data) > 1000:
+        raise HTTPException(status_code=400, detail="String exceeds 1000 character limit.")
+    
     doc_ref = db.collection(u'users').document(email)
     user_data = doc_ref.get().to_dict()
     points = user_data.get('points', 0)
@@ -131,7 +134,7 @@ def create_string_tattoo(req: StringTattooRequest, email: str = Depends(verify_t
     new_tattoo_id = str(latest_id + 1)
     
     try:
-        signatures = tattoo.upload_string(req.string_data, new_tattoo_id, email)
+        signatures = tattoo.ar_upload_string(req.string_data, new_tattoo_id, email)
         new_points = points - 1
         doc_ref.update({"points": new_points, "latest_ID": latest_id + 1})
         
@@ -139,6 +142,7 @@ def create_string_tattoo(req: StringTattooRequest, email: str = Depends(verify_t
         t_ref.set({
             "tattoo_id": new_tattoo_id,
             "type": "string",
+            "blockchain": "arweave",
             "preview": req.string_data[:20] + ("..." if len(req.string_data) > 20 else ""),
             "signatures": signatures,
             "timestamp": datetime.utcnow().isoformat()
@@ -171,24 +175,25 @@ def process_file_upload_worker(
                 img = img.convert("RGB")
                 print("Converted image to RGB")
                 
+            WEBP_TARGET_SIZE = 150 * 1024  # 150KB target for WebP
             quality = 90
             print(f"Original image size: {original_size} bytes")
-            # Iterate to compress under 64KB
+            # Iterate to compress under 150KB
             while True:
                 out_io = io.BytesIO()
                 img.save(out_io, format="WEBP", quality=quality)
                 temp_webp = out_io.getvalue()
                 print(f"Compressed image size: {len(temp_webp)} bytes")
                 
-                if len(temp_webp) <= 65536 or quality <= 10:
+                if len(temp_webp) <= WEBP_TARGET_SIZE or quality <= 10:
                     webp_content = temp_webp
                     break
                 quality -= 10
                 
-            # If still over 64KB at quality 10, resize the image dimensions
-            if len(webp_content) > 65536:
+            # If still over target at quality 10, resize the image dimensions
+            if len(webp_content) > WEBP_TARGET_SIZE:
                 print(f"resizing...")
-                while len(webp_content) > 65536:
+                while len(webp_content) > WEBP_TARGET_SIZE:
                     width, height = img.size
                     img = img.resize((int(width * 0.8), int(height * 0.8)), Image.Resampling.LANCZOS)
                     out_io = io.BytesIO()
@@ -198,8 +203,9 @@ def process_file_upload_worker(
                     
             webp_filename = f"{filename}_.webp"
             
-        # The file we actually tattoo on Solana
-        tattoo_content = webp_content if is_image else content
+        # The file we actually tattoo on Arweave (use original file, not WebP)
+        # Arweave supports up to 6MB per TX, no chunking needed
+        tattoo_content = content
         
         with open(tmp_path, "wb") as f:
             f.write(tattoo_content)
@@ -272,10 +278,11 @@ def process_file_upload_worker(
                 print("Failed to backup to Vaultsage:", ve)
                 
         t_ref.update({"uploading_status": "tattoo to blockchain"})
-        signatures = tattoo.upload(tmp_path, new_tattoo_id, email)
+        signatures = tattoo.ar_upload(tmp_path, new_tattoo_id, email)
         
         t_data_updates = {
             "uploading_status": "done",
+            "blockchain": "arweave",
             "filename": filename,
             "original_filename": filename,
             "original_size": original_size,
@@ -324,9 +331,9 @@ async def create_file_tattoo(
     content = await file.read()
     original_size = len(content)
     
-    # 1. Check size limit and file type
-    if original_size > 2 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File size exceeds the 2MB limit.")
+    # 1. Check size limit and file type (10MB for Arweave)
+    if original_size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size exceeds the 10MB limit.")
         
     valid_image_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
     if file.content_type not in valid_image_types:
@@ -340,6 +347,7 @@ async def create_file_tattoo(
     t_ref.set({
         "tattoo_id": new_tattoo_id,
         "type": "file",
+        "blockchain": "arweave",
         "original_filename": file.filename,
         "uploading_status": "starting",
         "timestamp": datetime.utcnow().isoformat()
@@ -372,21 +380,34 @@ def read_tattoo(tattoo_id: str, fallback_solana: bool = False, email: str = Depe
         
     t_data = doc.to_dict()
     t_type = t_data.get("type")
+    blockchain = t_data.get("blockchain", "solana")  # default to solana for old records
     
     if t_type == "string":
-        # Check if we have signatures stored for quick retrieval
         signatures = t_data.get("signatures", [])
-        if signatures:
-            try:
+        if not signatures:
+            raise HTTPException(status_code=404, detail="No signatures found for this tattoo.")
+        
+        try:
+            if blockchain == "arweave":
+                text = tattoo.ar_download_by_tx_ids(signatures)
+                if isinstance(text, bytes):
+                    text = text.decode('utf-8')
+            else:
+                # Legacy Solana tattoos
                 text = tattoo.download_by_signatures(signatures)
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Solana Retrieval Error: {str(e)}")
-        else:
-            # Fallback to the old method (scanning the blockchain)
-            text = tattoo.download(tattoo_id, None, email)
+                if not text:
+                    text = tattoo.download(tattoo_id, None, email)
+        except Exception as e:
+            err_msg = str(e)
+            # Arweave TX may not be indexed yet
+            if blockchain == "arweave" and ("404" in err_msg or "Not Found" in err_msg or "failed" in err_msg.lower()):
+                return {"type": "string", "content": None, "pending": True}
+            raise HTTPException(status_code=500, detail=f"Blockchain Retrieval Error: {err_msg}")
             
         if not text:
-            raise HTTPException(status_code=404, detail="Failed to retrieve string tattoo from Solana")
+            if blockchain == "arweave":
+                return {"type": "string", "content": None, "pending": True}
+            raise HTTPException(status_code=404, detail="Failed to retrieve string tattoo.")
         return {"type": "string", "content": text}
         
     elif t_type == "file":
@@ -428,20 +449,27 @@ def read_tattoo(tattoo_id: str, fallback_solana: bool = False, email: str = Depe
                 except Exception as e:
                     print(f"VaultSage search/download failed for {try_name}:", e)
 
-        # Fallback to Solana if VaultSage failed
+        # Fallback to blockchain if VaultSage failed
         if not vaultsage_success:
             if not fallback_solana:
                 return JSONResponse(status_code=202, content={"fallback_needed": True})
             
-            print(f"Falling back to Solana for tattoo {tattoo_id}")
+            print(f"Falling back to blockchain ({blockchain}) for tattoo {tattoo_id}")
             signatures = t_data.get("signatures", [])
-            if signatures:
-                file_content_bytes = tattoo.download_by_signatures(signatures)
-            else:
-                file_content_bytes = tattoo.download(tattoo_id, None, email)
+            try:
+                if blockchain == "arweave":
+                    file_content_bytes = tattoo.ar_download_by_tx_ids(signatures)
+                else:
+                    # Legacy Solana tattoos
+                    if signatures:
+                        file_content_bytes = tattoo.download_by_signatures(signatures)
+                    else:
+                        file_content_bytes = tattoo.download(tattoo_id, None, email)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Blockchain retrieval error: {str(e)}")
                 
             if not file_content_bytes:
-                raise HTTPException(status_code=404, detail="Failed to retrieve file tattoo from Solana")
+                raise HTTPException(status_code=404, detail="Failed to retrieve file tattoo from blockchain")
             file_content = file_content_bytes
             download_filename = webp_filename or filename
             

@@ -8,3 +8,4 @@ Pillow>=10.2.0
 python-dotenv==1.0.1
 solana==0.33.0
 solders==0.21.0
+arweave-python-client

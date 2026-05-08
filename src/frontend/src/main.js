@@ -38,8 +38,8 @@ document.querySelector('#app').innerHTML = `
           <h2 id="lbl-create-string">建立字串刺青</h2>
           <form id="string-form">
             <div class="form-group">
-              <label id="lbl-string-msg">訊息 (最多 500 字元)</label>
-              <textarea id="string-input" rows="4" maxlength="500" required></textarea>
+              <label id="lbl-string-msg">訊息 (最多 1000 字元)</label>
+              <textarea id="string-input" rows="4" maxlength="1000" required></textarea>
             </div>
             <button type="submit" id="btn-string">刺進區塊鏈</button>
           </form>
@@ -50,7 +50,7 @@ document.querySelector('#app').innerHTML = `
           <h2 id="lbl-create-file">建立檔案刺青</h2>
           <form id="file-form">
             <div class="form-group">
-              <label id="lbl-file-msg">檔案 (最大 2MB。圖片將自動壓縮)</label>
+              <label id="lbl-file-msg">檔案 (最大 10MB。圖片將自動壓縮)</label>
               <input type="file" id="file-input" required />
             </div>
             <button type="submit" id="btn-file">刺進區塊鏈</button>
@@ -147,8 +147,9 @@ async function loadTattoos() {
          
          const txBtnText = langText === 'zh' ? "想要自己從區塊鏈下載" : "Download from Blockchain yourself";
          const sigsJson = t.signatures ? JSON.stringify(t.signatures).replace(/'/g, "\\'").replace(/"/g, "&quot;") : '[]';
+         const blockchain = t.blockchain || 'solana';
          const txButton = (t.signatures && t.signatures.length > 0 && (!t.uploading_status || t.uploading_status === 'done'))
-           ? `<button class="action-btn" onclick="showTransactions(${sigsJson}, event)" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.4); color: white; border-radius: 4px; cursor: pointer;">${txBtnText}</button>`
+           ? `<button class="action-btn" onclick="showTransactions(${sigsJson}, event, '${blockchain}')" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.4); color: white; border-radius: 4px; cursor: pointer;">${txBtnText}</button>`
            : '';
 
          if (t.type === 'string') {
@@ -241,9 +242,17 @@ window.downloadTattoo = async (id, forceFallback = false, e = null) => {
     
     const contentType = res.headers.get("Content-Type");
     if (contentType && contentType.includes("application/json")) {
-        const data = await res.json();
-        if (res.ok && data.type === 'string') {
-            alert("Tattoo String: \n\n" + data.content);
+         const data = await res.json();
+         if (res.ok && data.type === 'string') {
+             if (data.pending) {
+                 const lang = document.getElementById('lang-select').value;
+                 const pendingMsg = lang === 'zh'
+                   ? "交易尚未完成，請稍候幾分鐘後再試。"
+                   : "Transaction is still being confirmed. Please try again in a few minutes.";
+                 alert(pendingMsg);
+             } else {
+                 alert("Tattoo String: \n\n" + data.content);
+             }
         } else {
             alert("Error: " + data.detail);
         }
@@ -287,19 +296,23 @@ window.downloadTattoo = async (id, forceFallback = false, e = null) => {
   }
 };
 
-window.showTransactions = (sigs, e = null) => {
+window.showTransactions = (sigs, e = null, bc = 'solana') => {
   if(e) e.stopPropagation();
   const lang = document.getElementById('lang-select').value;
   const title = lang === 'zh' ? '區塊鏈交易紀錄' : 'Blockchain Transactions';
   const closeText = lang === 'zh' ? '關閉' : 'Close';
   const tutorialText = lang === 'zh' ? '如何在區塊鏈組合出自己的刺青檔案' : 'How to assemble your tattoo file from blockchain';
   const parsed = typeof sigs === 'string' ? JSON.parse(sigs) : sigs;
+  const blockchain = typeof bc !== 'undefined' ? bc : 'solana';
   
   const linksHtml = parsed.map((sig, i) => {
     const shortSig = sig.substring(0, 16) + '...' + sig.substring(sig.length - 8);
+    const explorerUrl = blockchain === 'arweave'
+      ? `https://viewblock.io/arweave/tx/${sig}`
+      : `https://explorer.solana.com/tx/${sig}?cluster=devnet`;
     return `<div style="margin: 6px 0;">
       <span style="color: var(--text-secondary); font-size: 0.85rem;">#${i+1}</span>
-      <a href="https://explorer.solana.com/tx/${sig}?cluster=devnet" target="_blank" 
+      <a href="${explorerUrl}" target="_blank" 
          style="margin-left: 8px; color: #8b5cf6; word-break: break-all; font-size: 0.85rem;">${shortSig}</a>
     </div>`;
   }).join('');
@@ -366,8 +379,8 @@ document.getElementById('file-form').addEventListener('submit', async (e) => {
 
   const lang = document.getElementById('lang-select').value;
   const msg = lang === 'zh' 
-    ? "你確定嗎？一旦確認，刺青將永遠存在於區塊鏈上，且無法消失！\n\n注意！圖像檔案刺青需要產生成千上百個交易，因此至少需要花2小時" 
-    : "Are you sure? Once you confirm, the tattoo will NEVER disappear! It will be there forever.\n\nNote: Image file tattooing requires hundreds of transactions and will take at least 2 hours.";
+    ? "你確定嗎？一旦確認，刺青將永遠存在於區塊鏈上，且無法消失！" 
+    : "Are you sure? Once you confirm, the tattoo will NEVER disappear! It will be there forever.";
   if (!confirm(msg)) return;
 
   const fileInput = document.getElementById('file-input');
@@ -438,11 +451,11 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lnk-operate')) document.getElementById('lnk-operate').innerText = "自己操作區塊鏈";
     
     if(document.getElementById('lbl-create-string')) document.getElementById('lbl-create-string').innerText = "建立字串刺青";
-    if(document.getElementById('lbl-string-msg')) document.getElementById('lbl-string-msg').innerText = "訊息 (最多 500 字元)";
+    if(document.getElementById('lbl-string-msg')) document.getElementById('lbl-string-msg').innerText = "訊息 (最多 1000 字元)";
     if(document.getElementById('btn-string')) document.getElementById('btn-string').innerText = "刺進區塊鏈";
     
     if(document.getElementById('lbl-create-file')) document.getElementById('lbl-create-file').innerText = "建立檔案刺青";
-    if(document.getElementById('lbl-file-msg')) document.getElementById('lbl-file-msg').innerText = "檔案 (最大 2MB。圖片將自動壓縮)";
+    if(document.getElementById('lbl-file-msg')) document.getElementById('lbl-file-msg').innerText = "檔案 (最大 10MB。圖片將自動壓縮)";
     if(document.getElementById('btn-file')) document.getElementById('btn-file').innerText = "刺進區塊鏈";
     
     if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "你的刺青";
@@ -454,11 +467,11 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lnk-operate')) document.getElementById('lnk-operate').innerText = "operate Blockchain";
     
     if(document.getElementById('lbl-create-string')) document.getElementById('lbl-create-string').innerText = "Create String Tattoo";
-    if(document.getElementById('lbl-string-msg')) document.getElementById('lbl-string-msg').innerText = "Message (Max 500 characters)";
+    if(document.getElementById('lbl-string-msg')) document.getElementById('lbl-string-msg').innerText = "Message (Max 1000 characters)";
     if(document.getElementById('btn-string')) document.getElementById('btn-string').innerText = "Tattoo to Blockchain";
     
     if(document.getElementById('lbl-create-file')) document.getElementById('lbl-create-file').innerText = "Create File Tattoo";
-    if(document.getElementById('lbl-file-msg')) document.getElementById('lbl-file-msg').innerText = "File (Max 2MB. Images auto-compressed)";
+    if(document.getElementById('lbl-file-msg')) document.getElementById('lbl-file-msg').innerText = "File (Max 10MB. Images auto-compressed)";
     if(document.getElementById('btn-file')) document.getElementById('btn-file').innerText = "Tattoo to Blockchain";
     
     if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "Your Tattoos";

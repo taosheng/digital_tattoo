@@ -26,6 +26,8 @@ COPY src/ /app/src/
 
 # Copy config files
 COPY .env* saltycat.json* /app/
+# Copy Arweave wallet key file
+COPY ar_new_wallet_1.json /app/
 
 # Copy frontend build to backend static folder
 COPY --from=frontend-build /app/frontend/dist /app/src/backend/static

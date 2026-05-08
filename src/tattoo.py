@@ -17,6 +17,9 @@ from solders.instruction import Instruction
 
 load_dotenv()
 
+# ============================================================
+# Solana Setup
+# ============================================================
 RPC_URL = "https://api.devnet.solana.com"
 client = Client(RPC_URL)
 MEMO_PROGRAM_ID = Pubkey.from_string("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr")
@@ -25,10 +28,30 @@ try:
     sender_key = Keypair.from_bytes(bytes(ast.literal_eval(os.getenv("SENDER_SECRET_KEY"))))
     receiver_pub = Pubkey.from_string(os.getenv("RECEIVER_PUBLIC_KEY"))
 except Exception as e:
-    print(f"Error: Could not read valid keys from .env. Please check the format. {e}")
-    exit(1)
+    print(f"Warning: Could not read Solana keys from .env: {e}")
+    sender_key = None
+    receiver_pub = None
 
 MAX_UPLOAD_SIZE_KB = int(os.getenv("MAX_UPLOAD_SIZE_KB", "1024"))
+
+# ============================================================
+# Arweave Setup
+# ============================================================
+AR_WALLET = None
+AR_RECEIVER_ADDRESS = os.getenv("AR_RECEIVER_ADDRESS", "")
+AR_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB limit for Arweave file tattoos
+
+try:
+    from arweave.arweave_lib import Wallet as ArWallet
+    from arweave.arweave_lib import Transaction as ArTransaction
+    ar_key_path = os.getenv("AR_SENDER_KEY", "")
+    if ar_key_path and os.path.exists(ar_key_path):
+        AR_WALLET = ArWallet(ar_key_path)
+        print(f"Arweave wallet loaded: {AR_WALLET.address}")
+except ImportError:
+    pass
+except Exception as e:
+    print(f"Warning: Could not load Arweave wallet: {e}")
 
 def check_balances():
     try:
@@ -388,41 +411,369 @@ def list_tattoos(user_email=None):
     else:
         print("Could not find any tattoo records matching the criteria.")
 
+# ============================================================
+# Arweave Upload / Download / List Functions
+# ============================================================
+
+# Multiple Arweave gateways for resilience
+AR_GRAPHQL_GATEWAYS = [
+    "https://arweave-search.goldsky.com/graphql",
+    "https://arweave.net/graphql",
+]
+AR_DATA_GATEWAYS = [
+    "https://arweave.net",
+    "https://arweave.dev",
+]
+
+def ar_graphql_query(query):
+    """Execute a GraphQL query against Arweave, trying multiple gateways."""
+    import httpx
+    last_error = None
+    for gw in AR_GRAPHQL_GATEWAYS:
+        try:
+            res = httpx.post(gw, json={"query": query}, timeout=30.0)
+            if res.status_code == 200:
+                return res.json()
+            else:
+                last_error = f"{gw} returned {res.status_code}"
+                print(f"⚠️ {last_error}, trying next gateway...")
+        except Exception as e:
+            last_error = f"{gw}: {e}"
+            print(f"⚠️ {last_error}, trying next gateway...")
+    print(f"❌ All Arweave GraphQL gateways failed. Last error: {last_error}")
+    return None
+
+def ar_fetch_data(tx_id):
+    """Fetch raw transaction data from Arweave, trying multiple gateways."""
+    import httpx
+    last_error = None
+    for gw in AR_DATA_GATEWAYS:
+        try:
+            res = httpx.get(f"{gw}/{tx_id}", timeout=60.0, follow_redirects=True)
+            if res.status_code == 200:
+                return res.content
+            else:
+                last_error = f"{gw} returned {res.status_code}"
+                print(f"⚠️ {last_error}, trying next gateway...")
+        except Exception as e:
+            last_error = f"{gw}: {e}"
+            print(f"⚠️ {last_error}, trying next gateway...")
+    return None
+
+def ar_send_tx(data_bytes, tags, description="", max_retries=5):
+    """Send a single Arweave transaction with data and tags. Returns tx_id string.
+    Includes retry logic to handle rate limits from the Arweave gateway."""
+    import random
+    
+    if not AR_WALLET:
+        raise Exception("Arweave wallet not loaded. Check AR_SENDER_KEY in .env")
+    
+    for attempt in range(max_retries):
+        try:
+            tx = ArTransaction(AR_WALLET, data=data_bytes)
+            for k, v in tags.items():
+                tx.add_tag(k, v)
+            
+            tx.sign()
+            
+            # Manual send with response checking (library silently ignores errors)
+            import requests
+            url = f"{tx.api_url}/tx"
+            headers = {'Content-Type': 'application/json', 'Accept': 'text/plain'}
+            response = requests.post(url, data=tx.json_data, headers=headers, timeout=30)
+            
+            if response.status_code == 200:
+                tx_id = tx.id
+                print(f"Arweave TX sent and accepted: {tx_id} {description}")
+                
+                # Verify TX status
+                status_res = requests.get(f"{tx.api_url}/tx/{tx_id}/status", timeout=10)
+                if status_res.status_code == 200:
+                    print(f"  ✅ TX confirmed on-chain")
+                elif status_res.status_code == 202 or status_res.text == "Pending":
+                    print(f"  ⏳ TX accepted, pending confirmation (~10-20 min for indexing)")
+                
+                return tx_id
+            else:
+                raise Exception(f"Arweave node rejected TX: HTTP {response.status_code} - {response.text[:200]}")
+        except (UnboundLocalError, Exception) as e:
+            err_msg = str(e)
+            # UnboundLocalError = arweave.net/price API failed (rate limit / network)
+            if isinstance(e, UnboundLocalError) or "reward" in err_msg.lower():
+                print(f"⚠️ Attempt {attempt+1}/{max_retries}: Arweave gateway not responding (rate limit). Retrying...")
+            else:
+                print(f"⚠️ Attempt {attempt+1}/{max_retries} failed: {err_msg}")
+            
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 3 + random.uniform(0, 2)
+                print(f"   Waiting {wait_time:.1f}s before retry...")
+                time.sleep(wait_time)
+            else:
+                raise Exception(f"Failed to send Arweave TX after {max_retries} attempts: {err_msg}")
+
+
+def ar_upload(file_path, tattoo_id, user_email):
+    """Upload a file to Arweave in a single transaction (no chunking needed)."""
+    if not os.path.exists(file_path):
+        print(f"Error: File not found {file_path}")
+        return
+    
+    file_size = os.path.getsize(file_path)
+    if file_size > AR_MAX_FILE_SIZE:
+        print(f"Error: File size ({file_size / (1024*1024):.2f} MB) exceeds the Arweave limit of {AR_MAX_FILE_SIZE / (1024*1024):.0f} MB.")
+        return
+    
+    with open(file_path, "rb") as f:
+        file_data = f.read()
+    
+    file_name = os.path.basename(file_path)
+    print(f"Starting Arweave file tattoo... ID: {tattoo_id}, Email: {user_email}, Size: {file_size} bytes")
+    
+    tags = {
+        "App-Name": "DigitalTattoo",
+        "Tattoo-Protocol": "TAO",
+        "Tattoo-ID": str(tattoo_id),
+        "Tattoo-Type": "f",
+        "Tattoo-Email": user_email,
+        "Tattoo-Filename": file_name,
+        "Tattoo-FileSize": str(file_size),
+        "Content-Type": "application/octet-stream",
+    }
+    
+    tx_id = ar_send_tx(file_data, tags, f"(file: {file_name})")
+    print(f"\nArweave file tattoo completed! Tattoo ID: {tattoo_id}, TX: {tx_id}")
+    print(f"⏳ Note: Arweave transactions take ~10-20 minutes to be indexed. List/download may not work immediately.")
+    return [tx_id]
+
+
+def ar_upload_string(text, tattoo_id, user_email):
+    """Upload a string to Arweave in a single transaction."""
+    if len(text) > 1000:
+        print("Error: String length exceeds limit (1000 characters)")
+        return []
+    
+    print(f"Starting Arweave string tattoo... ID: {tattoo_id}, Email: {user_email}")
+    
+    tags = {
+        "App-Name": "DigitalTattoo",
+        "Tattoo-Protocol": "TAO",
+        "Tattoo-ID": str(tattoo_id),
+        "Tattoo-Type": "s",
+        "Tattoo-Email": user_email,
+        "Content-Type": "text/plain; charset=utf-8",
+    }
+    
+    tx_id = ar_send_tx(text.encode('utf-8'), tags, f"(string)")
+    print(f"\nArweave string tattoo completed! Tattoo ID: {tattoo_id}, TX: {tx_id}")
+    print(f"⏳ Note: Arweave transactions take ~10-20 minutes to be indexed. List/download may not work immediately.")
+    return [tx_id]
+
+
+def ar_download(tattoo_id, output_path, user_email):
+    """Download tattoo data from Arweave using GraphQL to find the transaction by tags."""
+    import httpx
+    
+    query = """
+    query {
+        transactions(
+            tags: [
+                { name: "App-Name", values: ["DigitalTattoo"] },
+                { name: "Tattoo-ID", values: ["%s"] },
+                { name: "Tattoo-Email", values: ["%s"] }
+            ],
+            first: 1
+        ) {
+            edges {
+                node {
+                    id
+                    tags { name value }
+                }
+            }
+        }
+    }
+    """ % (tattoo_id, user_email)
+    
+    print(f"Searching Arweave for tattoo ID: {tattoo_id}, Email: {user_email}...")
+    result = ar_graphql_query(query)
+    
+    if not result:
+        return None
+    
+    edges = result.get("data", {}).get("transactions", {}).get("edges", [])
+    if not edges:
+        print("No Arweave tattoo found for this ID. (Transactions may take ~10-20 min to be indexed)")
+        return None
+    
+    node = edges[0]["node"]
+    tx_id = node["id"]
+    tags = {t["name"]: t["value"] for t in node["tags"]}
+    tattoo_type = tags.get("Tattoo-Type", "f")
+    
+    print(f"Found Arweave TX: {tx_id}, Type: {tattoo_type}")
+    
+    # Fetch the raw data
+    data = ar_fetch_data(tx_id)
+    if not data:
+        print(f"Failed to fetch data from Arweave for TX: {tx_id}")
+        return None
+    
+    if tattoo_type == "s":
+        text = data.decode('utf-8')
+        if output_path:
+            with open(output_path, "w") as f:
+                f.write(text)
+            print(f"String saved to: {output_path}")
+        else:
+            print(f"\n--- 刺青內容 (Tattoo Content) ---\n{text}\n--------------------------------")
+        return text
+    else:
+        if output_path:
+            with open(output_path, "wb") as f:
+                f.write(data)
+            original_name = tags.get("Tattoo-Filename", "unknown")
+            print(f"File saved to: {output_path} (original: {original_name})")
+            return True
+        else:
+            return data
+
+
+def ar_download_by_tx_ids(tx_ids):
+    """Download and return data from Arweave given a list of transaction IDs.
+    For Arweave, each tattoo is a single transaction, so we just fetch the first one."""
+    if not tx_ids:
+        raise Exception("No transaction IDs provided.")
+    
+    tx_id = tx_ids[0]  # Arweave: single tx per tattoo
+    data = ar_fetch_data(tx_id)
+    if not data:
+        raise Exception(f"Failed to fetch Arweave TX {tx_id} from all gateways")
+    
+    return data
+
+
+def ar_list_tattoos(user_email=None):
+    """List all tattoos on Arweave for a given email."""
+    email_filter = ""
+    if user_email:
+        email_filter = f', {{ name: "Tattoo-Email", values: ["{user_email}"] }}'
+    
+    query = """
+    query {
+        transactions(
+            tags: [
+                { name: "App-Name", values: ["DigitalTattoo"] }%s
+            ],
+            first: 100
+        ) {
+            edges {
+                node {
+                    id
+                    tags { name value }
+                }
+            }
+        }
+    }
+    """ % email_filter
+    
+    print(f"Scanning Arweave for tattoo records...")
+    if user_email:
+        print(f"Filter: Email = {user_email}")
+    
+    result = ar_graphql_query(query)
+    if not result:
+        return
+    
+    edges = result.get("data", {}).get("transactions", {}).get("edges", [])
+    if not edges:
+        print("No tattoos found on Arweave. (Transactions may take ~10-20 min to be indexed)")
+        return
+    
+    print(f"Tattoos found on Arweave ({len(edges)}):")
+    for edge in edges:
+        tags = {t["name"]: t["value"] for t in edge["node"]["tags"]}
+        tx_id = edge["node"]["id"]
+        t_type = tags.get("Tattoo-Type", "?")
+        t_id = tags.get("Tattoo-ID", "?")
+        t_email = tags.get("Tattoo-Email", "?")
+        
+        if t_type == "s":
+            print(f"- [String] Email: {t_email}, ID: {t_id}, TX: {tx_id}")
+        elif t_type == "f":
+            fname = tags.get("Tattoo-Filename", "unknown")
+            fsize = tags.get("Tattoo-FileSize", "?")
+            print(f"- [File] Email: {t_email}, ID: {t_id}, File: {fname}, Size: {fsize}, TX: {tx_id}")
+
+
+def ar_check_balance():
+    """Check Arweave wallet balance."""
+    if not AR_WALLET:
+        print("Arweave wallet not loaded.")
+        return
+    print(f"Arweave Wallet Address: {AR_WALLET.address}")
+    try:
+        balance = AR_WALLET.balance
+        print(f"Arweave Balance: {balance} winston ({float(balance) / 1e12:.6f} AR)")
+    except Exception as e:
+        print(f"Could not fetch Arweave balance: {e}")
+
+
+# ============================================================
+# CLI Entry Point
+# ============================================================
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Solana Digital Tattoo Tool")
+    parser = argparse.ArgumentParser(description="Digital Tattoo Tool (Solana / Arweave)")
     parser.add_argument("action", choices=["upload", "upload_string", "download", "read", "list", "balance"], help="Action to execute")
     parser.add_argument("--file", help="File path (for upload or download destination)")
     parser.add_argument("--string", help="String to tattoo")
     parser.add_argument("--id", help="Unique tattoo ID")
     parser.add_argument("--email", help="User Email")
+    parser.add_argument("--blockchain", choices=["solana", "arweave"], default="solana", help="Blockchain to use (default: solana)")
     args = parser.parse_args()
+
+    use_arweave = (args.blockchain == "arweave")
 
     if args.action == "upload":
         if not args.file or not args.id or not args.email:
             print("File upload requires --file, --id and --email")
+        elif use_arweave:
+            ar_check_balance()
+            ar_upload(args.file, args.id, args.email)
         else:
             check_balances()
             upload(args.file, args.id, args.email)
     elif args.action == "upload_string":
         if not args.string or not args.id or not args.email:
             print("String upload requires --string, --id and --email")
+        elif use_arweave:
+            ar_check_balance()
+            ar_upload_string(args.string, args.id, args.email)
         else:
             check_balances()
             upload_string(args.string, args.id, args.email)
     elif args.action == "download":
         if not args.file or not args.id or not args.email:
             print("Download requires --file, --id and --email")
+        elif use_arweave:
+            ar_download(args.id, args.file, args.email)
         else:
             download(args.id, args.file, args.email)
     elif args.action == "read":
         if not args.id or not args.email:
             print("Read requires --id and --email")
+        elif use_arweave:
+            ar_download(args.id, None, args.email)
         else:
             download(args.id, None, args.email)
     elif args.action == "list":
         if not args.email:
             print("List requires --email")
+        elif use_arweave:
+            ar_list_tattoos(args.email)
         else:
             list_tattoos(args.email)
     elif args.action == "balance":
-        check_balances()
+        if use_arweave:
+            ar_check_balance()
+        else:
+            check_balances()
