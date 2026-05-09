@@ -4,8 +4,10 @@ import time
 import httpx
 from datetime import datetime
 from pydantic import BaseModel
-from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Security, BackgroundTasks, BackgroundTasks
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPException, Security, BackgroundTasks
+import string
+import random
+from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -175,10 +177,10 @@ def process_file_upload_worker(
                 img = img.convert("RGB")
                 print("Converted image to RGB")
                 
-            WEBP_TARGET_SIZE = 150 * 1024  # 150KB target for WebP
+            WEBP_TARGET_SIZE = 99 * 1024  # 99KB target for WebP (ArDrive Turbo Free Tier <100KB)
             quality = 90
             print(f"Original image size: {original_size} bytes")
-            # Iterate to compress under 150KB
+            # Iterate to compress under 99KB
             while True:
                 out_io = io.BytesIO()
                 img.save(out_io, format="WEBP", quality=quality)
@@ -203,9 +205,8 @@ def process_file_upload_worker(
                     
             webp_filename = f"{filename}_.webp"
             
-        # The file we actually tattoo on Arweave (use original file, not WebP)
-        # Arweave supports up to 6MB per TX, no chunking needed
-        tattoo_content = content
+        # The file we actually tattoo on Arweave: use WebP (≤99KB) for images, original for others
+        tattoo_content = webp_content if is_image else content
         
         with open(tmp_path, "wb") as f:
             f.write(tattoo_content)
@@ -515,6 +516,216 @@ def read_tattoo(tattoo_id: str, fallback_solana: bool = False, email: str = Depe
         return StreamingResponse(io.BytesIO(file_content), media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{download_filename}"'})
 
 
+@app.post("/api/tattoo/share/{tattoo_id}")
+def generate_share_link(tattoo_id: str, email: str = Depends(verify_token)):
+    if not db:
+        raise HTTPException(status_code=500, detail="Database disabled.")
+    
+    doc_ref = db.collection(u'users').document(email).collection(u'tattoos').document(tattoo_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Tattoo not found.")
+    
+    data = doc.to_dict()
+    share_key = data.get("share_key")
+    
+    if not share_key:
+        share_key = ''.join(random.choices(string.ascii_letters + string.digits, k=7))
+        doc_ref.update({"share_key": share_key})
+        db.collection(u'shares').document(share_key).set({
+            "email": email,
+            "tattoo_id": tattoo_id,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        
+    # Return the domain logic will be handled by the frontend, so we just return the key
+    return {"share_key": share_key}
+
+
+@app.get("/api/tattoo/share_image/{share_key}")
+def get_shared_image(share_key: str):
+    if not db:
+        raise HTTPException(status_code=500, detail="Database disabled.")
+    
+    share_doc = db.collection(u'shares').document(share_key).get()
+    if not share_doc.exists:
+        raise HTTPException(status_code=404, detail="Share not found.")
+    
+    share_data = share_doc.to_dict()
+    email = share_data.get("email")
+    tattoo_id = share_data.get("tattoo_id")
+    
+    doc = db.collection(u'users').document(email).collection(u'tattoos').document(tattoo_id).get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Tattoo not found.")
+    
+    t_data = doc.to_dict()
+    if t_data.get("type") != "file":
+        raise HTTPException(status_code=400, detail="Not a file tattoo.")
+        
+    filename = t_data.get("filename")
+    webp_filename = t_data.get("webp_filename")
+    blockchain = t_data.get("blockchain", "solana")
+    
+    file_content = None
+    
+    # Try VaultSage first
+    if VAULTSAGE_API_KEY:
+        for try_name in [webp_filename, filename]:
+            if not try_name or file_content:
+                continue
+            try:
+                hx = httpx.get(
+                    f"https://api.vaultsage.ai/api/v1/files/search?keyword={try_name}",
+                    headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                    timeout=10.0
+                )
+                if hx.status_code == 200:
+                    res_data = hx.json()
+                    files_list = res_data.get("files", [])
+                    if files_list:
+                        file_id = files_list[0]["id"]
+                        dl = httpx.post(
+                            "https://api.vaultsage.ai/api/v1/files/download",
+                            headers={"X-Api-Key": VAULTSAGE_API_KEY},
+                            json={"file_ids": [file_id]},
+                            timeout=30.0
+                        )
+                        if dl.status_code == 200:
+                            file_content = dl.content
+            except Exception:
+                pass
+
+    if not file_content:
+        # Fallback to blockchain
+        signatures = t_data.get("signatures", [])
+        try:
+            if blockchain == "arweave":
+                file_content = tattoo.ar_download_by_tx_ids(signatures)
+            else:
+                if signatures:
+                    file_content = tattoo.download_by_signatures(signatures)
+                else:
+                    file_content = tattoo.download(tattoo_id, None, email)
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to fetch from blockchain.")
+            
+    if not file_content:
+        raise HTTPException(status_code=404, detail="File not found anywhere.")
+        
+    import mimetypes
+    content_type = mimetypes.guess_type(webp_filename or filename)[0] or "application/octet-stream"
+    return StreamingResponse(io.BytesIO(file_content), media_type=content_type)
+
+
+@app.get("/tattoo/{share_key}", response_class=HTMLResponse)
+def view_shared_tattoo(share_key: str, request: Request):
+    if not db:
+        return HTMLResponse("<h1>Database disabled.</h1>", status_code=500)
+        
+    share_doc = db.collection(u'shares').document(share_key).get()
+    if not share_doc.exists:
+        return HTMLResponse("<h1>Tattoo not found or share link invalid.</h1>", status_code=404)
+        
+    share_data = share_doc.to_dict()
+    email = share_data.get("email")
+    tattoo_id = share_data.get("tattoo_id")
+    
+    user_doc = db.collection(u'users').document(email).get()
+    user_name = email
+    if user_doc.exists:
+        user_name = user_doc.to_dict().get("name", email)
+        
+    doc = db.collection(u'users').document(email).collection(u'tattoos').document(tattoo_id).get()
+    if not doc.exists:
+        return HTMLResponse("<h1>Tattoo not found.</h1>", status_code=404)
+        
+    t_data = doc.to_dict()
+    t_type = t_data.get("type")
+    blockchain = t_data.get("blockchain", "solana")
+    signatures = t_data.get("signatures", [])
+    
+    # Get tx link
+    tx_link = "#"
+    if blockchain == "arweave" and signatures:
+        tx_link = f"https://viewblock.io/arweave/tx/{signatures[0]}"
+    elif blockchain == "solana" and signatures:
+        tx_link = f"https://explorer.solana.com/tx/{signatures[0]}?cluster=devnet"
+        
+    content_html = ""
+    if t_type == "string":
+        # fetch string content
+        text = "Loading..."
+        if blockchain == "arweave":
+            try:
+                res = tattoo.ar_download_by_tx_ids(signatures)
+                if isinstance(res, bytes):
+                    res = res.decode('utf-8')
+                text = res or "Pending indexing on Arweave..."
+            except:
+                text = "Pending indexing on Arweave..."
+        else:
+            try:
+                text = tattoo.download_by_signatures(signatures)
+                if not text:
+                    text = tattoo.download(tattoo_id, None, email)
+            except:
+                text = "Failed to fetch from Solana."
+                
+        # safe html escape
+        import html
+        text = html.escape(text)
+        content_html = f'<textarea readonly style="width: 100%; height: 300px; padding: 15px; font-size: 1.2rem; color: black; background-color: #f0fff0; border-radius: 8px; border: 1px solid #ccc; resize: none;">{text}</textarea>'
+    else:
+        content_html = f'<div style="text-align: center;"><img src="/api/tattoo/share_image/{share_key}" style="max-width: 100%; max-height: 70vh; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" /></div>'
+        
+    base_url = str(request.base_url).rstrip('/')
+    og_image_tag = ""
+    if t_type == "file":
+        og_image_tag = f'<meta property="og:image" content="{base_url}/api/tattoo/share_image/{share_key}" />'
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>這是 {user_name} 的數位刺青!</title>
+        <meta property="og:title" content="這是 {user_name} 的數位刺青!" />
+        <meta property="og:description" content="數位刺青 無法刪除 無法修改 永遠存在於區塊鏈上" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="{base_url}/tattoo/{share_key}" />
+        {og_image_tag}
+        <style>
+            body {{ font-family: sans-serif; background-color: #f9f9f9; color: #333; line-height: 1.6; padding: 20px; max-width: 800px; margin: 0 auto; }}
+            h1 {{ font-size: 2rem; color: #8a2be2; text-align: center; }}
+            .section-1 {{ font-size: 0.9rem; text-align: center; color: #555; margin-bottom: 10px; font-weight: bold; }}
+            .section-2 {{ font-size: 0.9rem; text-align: center; color: #666; margin-bottom: 30px; }}
+            .section-2 a {{ color: #00d2ff; text-decoration: none; font-weight: bold; }}
+            .content-box {{ background: white; padding: 20px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); margin-bottom: 40px; }}
+            .footer {{ text-align: center; font-size: 0.9rem; border-top: 1px solid #eee; padding-top: 20px; }}
+            .footer a {{ color: #8a2be2; text-decoration: none; margin: 0 10px; font-weight: bold; }}
+        </style>
+    </head>
+    <body>
+        <h1>這是 {user_name} 的數位刺青!</h1>
+        <div class="section-1">數位刺青 無法刪除 無法修改 永遠存在於區塊鏈上</div>
+        <div class="section-2">
+            這個刺青存在於{blockchain}區塊鏈，想自己取得區塊鏈刺青資訊？<a href="{tx_link}" target="_blank">請按這裡</a>
+        </div>
+        
+        <div class="content-box">
+            {content_html}
+        </div>
+        
+        <div class="footer">
+            <a href="/">登入數位刺青</a> | 
+            <a href="https://www.5233.space/2026/05/tattoo.html" target="_blank">什麼是數位刺青</a>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 # Mount static frontend for production serving
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(STATIC_DIR):

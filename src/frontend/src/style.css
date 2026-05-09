@@ -207,6 +207,16 @@ button:disabled {
   to { transform: rotate(360deg); }
 }
 
+@media (max-width: 600px) {
+  .action-btn {
+    flex: 1 1 45%;
+    max-width: 45%;
+    min-width: 120px;
+    font-size: 0.7rem !important;
+    padding: 6px 4px !important;
+  }
+}
+
 #overlay {
   position: fixed;
   top:0; left:0; width: 100vw; height: 100vh;

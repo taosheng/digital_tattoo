@@ -5,6 +5,7 @@ import ast
 import argparse
 import time
 import json
+import mimetypes
 from dotenv import load_dotenv
 
 from solana.rpc.api import Client
@@ -45,15 +46,23 @@ try:
     from arweave.arweave_lib import Wallet as ArWallet
     from arweave.arweave_lib import Transaction as ArTransaction
     from arweave.transaction_uploader import get_uploader as ar_get_uploader
+    from arweave.deep_hash import deep_hash as ar_deep_hash
+    from jose.utils import base64url_encode as b64url_enc, base64url_decode as b64url_dec
     ar_key_path = os.getenv("AR_SENDER_KEY", "")
     if ar_key_path and os.path.exists(ar_key_path):
         AR_WALLET = ArWallet(ar_key_path)
         print(f"Arweave wallet loaded: {AR_WALLET.address}")
 except ImportError:
     ar_get_uploader = None
+    ar_deep_hash = None
+    b64url_enc = None
+    b64url_dec = None
     pass
 except Exception as e:
     ar_get_uploader = None
+    ar_deep_hash = None
+    b64url_enc = None
+    b64url_dec = None
     print(f"Warning: Could not load Arweave wallet: {e}")
 
 def check_balances():
@@ -424,6 +433,7 @@ AR_GRAPHQL_GATEWAYS = [
     "https://arweave.net/graphql",
 ]
 AR_DATA_GATEWAYS = [
+    "https://turbo-gateway.com",
     "https://arweave.net",
     "https://arweave.dev",
 ]
@@ -463,10 +473,118 @@ def ar_fetch_data(tx_id):
             print(f"⚠️ {last_error}, trying next gateway...")
     return None
 
+# ============================================================
+# ArDrive Turbo (ANS-104 Bundled Upload) — free for <100 KiB
+# ============================================================
+TURBO_UPLOAD_URLS = [
+    "https://turbo.ardrive.io/tx/arweave",
+    "https://upload.ardrive.io/v1/tx/arweave",
+]
+
+def _avro_encode_long(n):
+    """Encode integer as Avro long (zigzag + varint)."""
+    z = (n << 1) ^ (n >> 63)
+    result = bytearray()
+    while z > 0x7f:
+        result.append((z & 0x7f) | 0x80)
+        z >>= 7
+    result.append(z & 0x7f)
+    return bytes(result)
+
+def _serialize_tags_avro(tags_list):
+    """Serialize list of (name, value) tuples as ANS-104 Avro-encoded tags."""
+    if not tags_list:
+        return _avro_encode_long(0)
+    items_buf = bytearray()
+    for name, value in tags_list:
+        nb = name.encode('utf-8') if isinstance(name, str) else name
+        vb = value.encode('utf-8') if isinstance(value, str) else value
+        items_buf.extend(_avro_encode_long(len(nb)))
+        items_buf.extend(nb)
+        items_buf.extend(_avro_encode_long(len(vb)))
+        items_buf.extend(vb)
+    result = bytearray()
+    result.extend(_avro_encode_long(len(tags_list)))
+    result.extend(items_buf)
+    result.extend(_avro_encode_long(0))  # end of array
+    return bytes(result)
+
+def ar_build_data_item(data_bytes, tags_dict):
+    """Build and sign an ANS-104 DataItem with Arweave RSA-4096 wallet.
+    Returns (binary_data_item, data_item_id_string)."""
+    import struct
+    import hashlib as _hl
+
+    if not AR_WALLET or not ar_deep_hash:
+        raise Exception("Arweave wallet or deep_hash not available")
+
+    owner_bytes = b64url_dec(AR_WALLET.owner.encode())
+    tags_list = list(tags_dict.items())
+    serialized_tags = _serialize_tags_avro(tags_list)
+
+    # DeepHash input for ANS-104 DataItem signing (per arbundles reference)
+    # rawTarget = b'\x00' (presence byte only, no target)
+    # rawAnchor = b'\x00' (presence byte only, no anchor)
+    # rawTags = the serialized Avro bytes of tags
+    sign_data = ar_deep_hash([
+        b"dataitem",
+        b"1",                       # version
+        b"1",                       # signatureType.toString()
+        owner_bytes,
+        b"",                        # rawTarget (empty when no target)
+        b"",                        # rawAnchor (empty when no anchor)
+        serialized_tags,            # rawTags (Avro-encoded bytes)
+        data_bytes
+    ])
+
+    signature = AR_WALLET.sign(sign_data)
+    item_id = b64url_enc(_hl.sha256(signature).digest()).decode().rstrip('=')
+
+    buf = bytearray()
+    buf.extend(struct.pack('<H', 1))                       # sig type = 1 (Arweave)
+    buf.extend(signature)                                   # 512 bytes
+    buf.extend(owner_bytes)                                 # 512 bytes
+    buf.extend(b'\x00')                                     # no target
+    buf.extend(b'\x00')                                     # no anchor
+    buf.extend(struct.pack('<Q', len(tags_list)))           # num tags
+    buf.extend(struct.pack('<Q', len(serialized_tags)))    # tags byte length
+    buf.extend(serialized_tags)
+    buf.extend(data_bytes)
+    return bytes(buf), item_id
+
+def ar_send_via_turbo(data_bytes, tags_dict):
+    """Upload a signed ANS-104 DataItem via ArDrive Turbo. Returns tx_id string.
+    Free for data items under 100 KiB. Instant indexing."""
+    import requests as _req
+
+    data_item, item_id = ar_build_data_item(data_bytes, tags_dict)
+    last_error = ""
+    for url in TURBO_UPLOAD_URLS:
+        try:
+            response = _req.post(url, data=data_item,
+                                 headers={"Content-Type": "application/octet-stream"}, timeout=30)
+            if response.status_code == 200:
+                result = response.json()
+                return result.get("id", item_id)
+            elif response.status_code == 402:
+                raise Exception("Turbo: insufficient credits (data exceeds free tier)")
+            else:
+                last_error = f"HTTP {response.status_code} - {response.text[:100]}"
+                print(f"  Turbo {url}: {last_error}")
+        except _req.exceptions.ConnectionError:
+            last_error = f"{url}: connection error"
+            print(f"  Turbo endpoint unreachable, trying next...")
+        except Exception as e:
+            if "insufficient credits" in str(e):
+                raise
+            last_error = str(e)
+            print(f"  Turbo error: {last_error}")
+    raise Exception(f"All Turbo endpoints failed: {last_error}")
+
 def ar_send_tx(data_bytes, tags, description="", max_retries=5):
     """Send a single Arweave transaction with data and tags. Returns tx_id string.
-    Uses chunked upload for large data (>2MB) to avoid HTTP 413 errors.
-    Includes retry logic to handle rate limits from the Arweave gateway."""
+    Tries ArDrive Turbo first (free for <100KiB, instant indexing),
+    then falls back to L1 direct upload with chunked support."""
     import random
     import requests
     
@@ -474,8 +592,17 @@ def ar_send_tx(data_bytes, tags, description="", max_retries=5):
         raise Exception("Arweave wallet not loaded. Check AR_SENDER_KEY in .env")
     
     data_size = len(data_bytes)
-    # Arweave gateway nginx rejects large POST bodies; base64 encoding inflates size further.
-    # Use chunked upload for anything > 50KB to be safe.
+
+    # Try Turbo first (free for <100 KiB, instant indexing)
+    if ar_deep_hash and b64url_enc:
+        try:
+            tx_id = ar_send_via_turbo(data_bytes, tags)
+            print(f"✅ Turbo TX (instant): {tx_id} {description}")
+            return tx_id
+        except Exception as e:
+            print(f"⚠️ Turbo failed, falling back to L1: {e}")
+
+    # L1 fallback
     use_chunked = data_size > 50 * 1024
     
     for attempt in range(max_retries):
@@ -581,7 +708,7 @@ def ar_upload(file_path, tattoo_id, user_email):
         "Tattoo-Email": user_email,
         "Tattoo-Filename": file_name,
         "Tattoo-FileSize": str(file_size),
-        "Content-Type": "application/octet-stream",
+        "Content-Type": mimetypes.guess_type(file_name)[0] or "application/octet-stream",
     }
     
     tx_id = ar_send_tx(file_data, tags, f"(file: {file_name})")

@@ -11,7 +11,7 @@ document.querySelector('#app').innerHTML = `
     <div id="login-view" class="glass-panel" style="margin-top: 40px;">
       <h1 id="main-title">數位刺青</h1>
       <p id="main-subtitle" style="text-align: center; color: var(--text-secondary); margin-bottom: 2rem;">
-        你的資料刺進區塊鏈 永遠不會消失在！
+        你的資料刺進區塊鏈 永遠不會消失！
       </p>
       <div id="google-login-btn-container" style="display: flex; justify-content: center; min-height: 44px;"></div>
     </div>
@@ -149,23 +149,30 @@ async function loadTattoos() {
          const sigsJson = t.signatures ? JSON.stringify(t.signatures).replace(/'/g, "\\'").replace(/"/g, "&quot;") : '[]';
          const blockchain = t.blockchain || 'solana';
          const txButton = (t.signatures && t.signatures.length > 0 && (!t.uploading_status || t.uploading_status === 'done'))
-           ? `<button class="action-btn" onclick="showTransactions(${sigsJson}, event, '${blockchain}')" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.4); color: white; border-radius: 4px; cursor: pointer;">${txBtnText}</button>`
+           ? `<button class="action-btn" onclick="showTransactions(${sigsJson}, event, '${blockchain}')" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.4); color: #111; border-radius: 4px; cursor: pointer;">${txBtnText}</button>`
+           : '';
+
+         const shareBtnText = langText === 'zh' ? "分享" : "Share";
+         const shareButton = (!t.uploading_status || t.uploading_status === 'done')
+           ? `<button class="action-btn" onclick="shareTattoo('${t.tattoo_id}', event)" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(0, 210, 255, 0.2); border: 1px solid rgba(0, 210, 255, 0.4); color: #111; border-radius: 4px; cursor: pointer;">${shareBtnText}</button>`
            : '';
 
          if (t.type === 'string') {
              const btnText = langText === 'zh' ? "查看文字" : "View String";
              actionButtons = `
-               <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+               <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end;">
                    <button class="action-btn" onclick="downloadTattoo('${t.tattoo_id}', false, event)" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(255,255,255,0.85); border: 1px solid var(--glass-border); color: #111; border-radius: 4px; cursor: pointer; font-weight: 500;">${btnText}</button>
                    ${txButton}
+                   ${shareButton}
                </div>
              `;
          } else {
              const cacheBtnText = langText === 'zh' ? "下載檔案" : "Download File";
              actionButtons = `
-               <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+               <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end;">
                    <button class="action-btn" onclick="downloadTattoo('${t.tattoo_id}', false, event)" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(255,255,255,0.85); border: 1px solid var(--glass-border); color: #111; border-radius: 4px; cursor: pointer; font-weight: 500;">${cacheBtnText}</button>
                    ${txButton}
+                   ${shareButton}
                </div>
              `;
          }
@@ -326,6 +333,9 @@ window.showTransactions = (sigs, e = null, bc = 'solana') => {
       <div style="margin-bottom: 16px;">
         <a href="https://github.com/taosheng/digital_tattoo/blob/main/find_your_tattoo_zh_TW.md" target="_blank" style="color: #8b5cf6; font-size: 0.9rem;">${tutorialText}</a>
       </div>
+      <div style="margin-bottom: 16px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 6px; border-left: 3px solid #8b5cf6; color: #ccc; font-size: 0.85rem;">
+        ${lang === 'zh' ? '區塊鏈紀錄需要10~20分鐘 如果是剛刺上的請等20再查' : 'Blockchain records take 10-20 minutes. If you just tattooed, please wait 20 mins before checking.'}
+      </div>
       ${linksHtml}
       <div style="margin-top: 16px; text-align: right;">
         <button onclick="document.getElementById('tx-modal').remove()" style="padding: 6px 16px; background: rgba(139,92,246,0.3); border: 1px solid rgba(139,92,246,0.5); color: white; border-radius: 6px; cursor: pointer;">${closeText}</button>
@@ -446,7 +456,7 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
   const lang = e.target.value;
   if (lang === 'zh') {
     document.getElementById('main-title').innerText = "數位刺青";
-    document.getElementById('main-subtitle').innerText = "你的資料刺進區塊鏈 永遠不會消失在！";
+    document.getElementById('main-subtitle').innerText = "你的資料刺進區塊鏈 永遠不會消失！";
     if(document.getElementById('lnk-what-is')) document.getElementById('lnk-what-is').innerText = "什麼是數位刺青";
     if(document.getElementById('lnk-operate')) document.getElementById('lnk-operate').innerText = "自己操作區塊鏈";
     
@@ -478,3 +488,58 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "Loading tattoos...";
   }
 });
+
+window.shareTattoo = async (id, e = null) => {
+  if(e) e.stopPropagation();
+  const lang = document.getElementById('lang-select').value;
+  showOverlay(lang === 'zh' ? "產生分享連結中..." : "Generating share link...");
+  
+  try {
+    const res = await fetch(`/api/tattoo/share/${id}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${window.sessionToken}` }
+    });
+    const data = await res.json();
+    if (res.ok) {
+        const shareUrl = `${window.location.origin}/tattoo/${data.share_key}`;
+        const titleText = lang === 'zh' ? '分享你的刺青' : 'Share Your Tattoo';
+        const closeText = lang === 'zh' ? '關閉' : 'Close';
+        const copyText = lang === 'zh' ? '複製連結' : 'Copy Link';
+        
+        const fbShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+        const xShareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(titleText)}`;
+        const liShareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
+        
+        const modal = document.createElement('div');
+        modal.id = 'share-modal';
+        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;';
+        modal.innerHTML = `
+          <div style="background: var(--bg-dark, #1a1a2e); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%;">
+            <h3 style="color: white; margin: 0 0 16px 0;">${titleText}</h3>
+            <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+               <input type="text" id="share-link-input" value="${shareUrl}" readonly style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #ccc; background: rgba(255,255,255,0.9); color: black;" />
+               <button onclick="navigator.clipboard.writeText(document.getElementById('share-link-input').value); alert('${lang === 'zh' ? '已複製！' : 'Copied!'}');" style="padding: 8px 16px; background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap;">${copyText}</button>
+            </div>
+            
+            <div style="display: flex; gap: 8px; margin-bottom: 24px; justify-content: center; flex-wrap: wrap;">
+                <a href="${fbShareUrl}" target="_blank" style="padding: 8px 16px; background: #1877F2; color: white; border-radius: 6px; text-decoration: none; font-weight: bold; flex: 1; text-align: center; min-width: 100px;">Facebook</a>
+                <a href="${xShareUrl}" target="_blank" style="padding: 8px 16px; background: #000000; color: white; border-radius: 6px; text-decoration: none; font-weight: bold; flex: 1; text-align: center; min-width: 100px;">X (Twitter)</a>
+                <a href="${liShareUrl}" target="_blank" style="padding: 8px 16px; background: #0A66C2; color: white; border-radius: 6px; text-decoration: none; font-weight: bold; flex: 1; text-align: center; min-width: 100px;">LinkedIn</a>
+            </div>
+            
+            <div style="text-align: right;">
+              <button onclick="document.getElementById('share-modal').remove()" style="padding: 6px 16px; background: rgba(139,92,246,0.3); border: 1px solid rgba(139,92,246,0.5); color: white; border-radius: 6px; cursor: pointer;">${closeText}</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        modal.addEventListener('click', (ev) => { if(ev.target === modal) modal.remove(); });
+    } else {
+        alert("Error: " + data.detail);
+    }
+  } catch (err) {
+    alert("Network error.");
+  } finally {
+    hideOverlay();
+  }
+};
