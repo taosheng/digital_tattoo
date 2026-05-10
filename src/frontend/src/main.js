@@ -25,6 +25,8 @@ document.querySelector('#app').innerHTML = `
             <a id="lnk-what-is" href="https://www.5233.space/2026/05/tattoo.html" target="_blank" style="font-size: 0.9em; display: inline-block; margin-top: 5px;">什麼是數位刺青</a>
             <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
             <a id="lnk-operate" href="https://github.com/taosheng/digital_tattoo/blob/main/find_your_tattoo_zh_TW.md" target="_blank" style="font-size: 0.9em; display: inline-block; margin-top: 5px;">自己操作區塊鏈</a>
+            <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
+            <a id="lnk-add-points" href="#" onclick="showPointsInfo(event)" style="font-size: 0.9em; display: inline-block; margin-top: 5px;">如何增加點數?</a>
           </div>
           <div class="points-badge">
             <span id="user-points">0</span> Points
@@ -543,3 +545,32 @@ window.shareTattoo = async (id, e = null) => {
     hideOverlay();
   }
 };
+
+window.showPointsInfo = (e) => {
+  if (e) e.preventDefault();
+  const lang = document.getElementById('lang-select').value;
+  const closeText = lang === 'zh' ? '關閉' : 'Close';
+
+  const existing = document.getElementById('points-info-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'points-info-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background: var(--bg-dark, #1a1a2e); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 28px; max-width: 420px; width: 90%;">
+      <h3 style="color: white; margin: 0 0 16px 0;">如何增加點數?</h3>
+      <p style="color: rgba(255,255,255,0.85); line-height: 1.8; margin: 0 0 20px 0;">
+        試營運期間 如果需要購買額外點數<br/>
+        請 email 給
+        <a href="mailto:saltycatchen@gmail.com" style="color: #00d2ff; font-weight: bold;">saltycatchen@gmail.com</a>
+      </p>
+      <div style="text-align: right;">
+        <button onclick="document.getElementById('points-info-modal').remove()" style="padding: 6px 16px; background: rgba(139,92,246,0.3); border: 1px solid rgba(139,92,246,0.5); color: white; border-radius: 6px; cursor: pointer;">${closeText}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', (ev) => { if (ev.target === modal) modal.remove(); });
+};
+

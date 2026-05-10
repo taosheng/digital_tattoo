@@ -683,15 +683,11 @@ def ar_send_tx(data_bytes, tags, description="", max_retries=5):
                 raise Exception(f"Failed to send Arweave TX after {max_retries} attempts: {err_msg}")
 
 
-def ar_upload(file_path, tattoo_id, user_email):
-    """Upload a file to Arweave in a single transaction (no chunking needed)."""
-    if not os.path.exists(file_path):
-        print(f"Error: File not found {file_path}")
-        return
-    
+def ar_upload(file_path, tattoo_id, user_email, extra_tags=None):
+    """Upload a file to Arweave in a single transaction."""
     file_size = os.path.getsize(file_path)
     if file_size > AR_MAX_FILE_SIZE:
-        print(f"Error: File size ({file_size / (1024*1024):.2f} MB) exceeds the Arweave limit of {AR_MAX_FILE_SIZE / (1024*1024):.0f} MB.")
+        print(f"Error: File size {file_size} bytes exceeds limit of {AR_MAX_FILE_SIZE} bytes.")
         return
     
     with open(file_path, "rb") as f:
@@ -710,6 +706,8 @@ def ar_upload(file_path, tattoo_id, user_email):
         "Tattoo-FileSize": str(file_size),
         "Content-Type": mimetypes.guess_type(file_name)[0] or "application/octet-stream",
     }
+    if extra_tags and isinstance(extra_tags, dict):
+        tags.update(extra_tags)
     
     tx_id = ar_send_tx(file_data, tags, f"(file: {file_name})")
     print(f"\nArweave file tattoo completed! Tattoo ID: {tattoo_id}, TX: {tx_id}")
@@ -717,7 +715,7 @@ def ar_upload(file_path, tattoo_id, user_email):
     return [tx_id]
 
 
-def ar_upload_string(text, tattoo_id, user_email):
+def ar_upload_string(text, tattoo_id, user_email, extra_tags=None):
     """Upload a string to Arweave in a single transaction."""
     if len(text) > 1000:
         print("Error: String length exceeds limit (1000 characters)")
@@ -733,6 +731,8 @@ def ar_upload_string(text, tattoo_id, user_email):
         "Tattoo-Email": user_email,
         "Content-Type": "text/plain; charset=utf-8",
     }
+    if extra_tags and isinstance(extra_tags, dict):
+        tags.update(extra_tags)
     
     tx_id = ar_send_tx(text.encode('utf-8'), tags, f"(string)")
     print(f"\nArweave string tattoo completed! Tattoo ID: {tattoo_id}, TX: {tx_id}")
@@ -900,7 +900,22 @@ if __name__ == "__main__":
     parser.add_argument("--id", help="Unique tattoo ID")
     parser.add_argument("--email", help="User Email")
     parser.add_argument("--blockchain", choices=["solana", "arweave"], default="solana", help="Blockchain to use (default: solana)")
+    parser.add_argument("--tags", help='Extra Arweave tags in JSON format, e.g. \'{"Project": "MyApp", "Version": "1.0"}\'')
     args = parser.parse_args()
+
+    # Parse optional extra tags
+    extra_tags = None
+    if args.tags:
+        try:
+            extra_tags = json.loads(args.tags)
+            if not isinstance(extra_tags, dict):
+                print("Error: --tags must be a JSON object (dict), e.g. '{\"Key\": \"Value\"}'")
+                extra_tags = None
+            else:
+                print(f"Extra tags loaded: {extra_tags}")
+        except json.JSONDecodeError as e:
+            print(f"Error parsing --tags JSON: {e}")
+            extra_tags = None
 
     use_arweave = (args.blockchain == "arweave")
 
@@ -909,7 +924,7 @@ if __name__ == "__main__":
             print("File upload requires --file, --id and --email")
         elif use_arweave:
             ar_check_balance()
-            ar_upload(args.file, args.id, args.email)
+            ar_upload(args.file, args.id, args.email, extra_tags)
         else:
             check_balances()
             upload(args.file, args.id, args.email)
@@ -918,7 +933,7 @@ if __name__ == "__main__":
             print("String upload requires --string, --id and --email")
         elif use_arweave:
             ar_check_balance()
-            ar_upload_string(args.string, args.id, args.email)
+            ar_upload_string(args.string, args.id, args.email, extra_tags)
         else:
             check_balances()
             upload_string(args.string, args.id, args.email)
