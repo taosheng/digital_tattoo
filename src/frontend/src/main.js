@@ -126,9 +126,12 @@ async function loadTattoos() {
        data.tattoos.forEach(t => {
          const item = document.createElement('div');
          item.className = 'tattoo-item';
+         const langText = document.getElementById('lang-select').value;
+         const typeBadgeText = langText === 'zh' ? '文字' : 'String';
+         const fileBadgeText = langText === 'zh' ? '圖檔' : 'File';
          const typeBadge = t.type === 'string' 
-           ? '<span class="badge string">文字</span>' 
-           : '<span class="badge file">圖檔</span>';
+           ? `<span class="badge string">${typeBadgeText}</span>` 
+           : `<span class="badge file">${fileBadgeText}</span>`;
            
          const displayTitle = t.type === 'string' 
            ? (t.preview || "String Tattoo " + t.tattoo_id)
@@ -145,7 +148,6 @@ async function loadTattoos() {
          }
            
          let actionButtons = '';
-         const langText = document.getElementById('lang-select').value;
          
          const txBtnText = langText === 'zh' ? "想要自己從區塊鏈下載" : "Download from Blockchain yourself";
          const sigsJson = t.signatures ? JSON.stringify(t.signatures).replace(/'/g, "\\'").replace(/"/g, "&quot;") : '[]';
@@ -472,6 +474,7 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     
     if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "你的刺青";
     if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "載入中...";
+    if(document.getElementById('lnk-add-points')) document.getElementById('lnk-add-points').innerText = "如何增加點數?";
   } else {
     document.getElementById('main-title').innerText = "Digital Tattoo";
     document.getElementById('main-subtitle').innerText = "Permanently immortalize your data on the Blockchain.";
@@ -488,6 +491,11 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     
     if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "Your Tattoos";
     if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "Loading tattoos...";
+    if(document.getElementById('lnk-add-points')) document.getElementById('lnk-add-points').innerText = "How to add points?";
+  }
+  
+  if (window.sessionToken) {
+    loadTattoos();
   }
 });
 
@@ -550,6 +558,10 @@ window.showPointsInfo = (e) => {
   if (e) e.preventDefault();
   const lang = document.getElementById('lang-select').value;
   const closeText = lang === 'zh' ? '關閉' : 'Close';
+  const titleText = lang === 'zh' ? '如何增加點數?' : 'How to add points?';
+  const descText = lang === 'zh' 
+    ? '試營運期間 如果需要購買額外點數<br/>請 email 給' 
+    : 'During the trial period, if you need to purchase extra points,<br/>please email to';
 
   const existing = document.getElementById('points-info-modal');
   if (existing) existing.remove();
@@ -559,10 +571,10 @@ window.showPointsInfo = (e) => {
   modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;';
   modal.innerHTML = `
     <div style="background: var(--bg-dark, #1a1a2e); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 28px; max-width: 420px; width: 90%;">
-      <h3 style="color: white; margin: 0 0 16px 0;">如何增加點數?</h3>
+      <h3 style="color: white; margin: 0 0 16px 0;">${titleText}</h3>
       <p style="color: rgba(255,255,255,0.85); line-height: 1.8; margin: 0 0 20px 0;">
-        試營運期間 如果需要購買額外點數<br/>
-        請 email 給
+        ${descText}
+        <br/>
         <a href="mailto:saltycatchen@gmail.com" style="color: #00d2ff; font-weight: bold;">saltycatchen@gmail.com</a>
       </p>
       <div style="text-align: right;">

@@ -207,10 +207,12 @@ def process_file_upload_worker(
             
         # The file we actually tattoo on Arweave: use WebP (≤99KB) for images, original for others
         tattoo_content = webp_content if is_image else content
+        # Use a .webp extension for images so mimetypes.guess_type() works correctly on-chain
+        tattoo_tmp_path = f"{tmp_path}.webp" if is_image else tmp_path
         
-        with open(tmp_path, "wb") as f:
+        with open(tattoo_tmp_path, "wb") as f:
             f.write(tattoo_content)
-            print(f"Saved temporary file to {tmp_path}")
+            print(f"Saved temporary file to {tattoo_tmp_path}")
 
         vaultsage_files = []
         
@@ -279,7 +281,7 @@ def process_file_upload_worker(
                 print("Failed to backup to Vaultsage:", ve)
                 
         t_ref.update({"uploading_status": "tattoo to blockchain"})
-        signatures = tattoo.ar_upload(tmp_path, new_tattoo_id, email)
+        signatures = tattoo.ar_upload(tattoo_tmp_path, new_tattoo_id, email)
         
         t_data_updates = {
             "uploading_status": "done",
@@ -307,8 +309,9 @@ def process_file_upload_worker(
         traceback.print_exc()
         t_ref.update({"uploading_status": f"error: {str(e)}"})
     finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        cleanup_path = locals().get('tattoo_tmp_path', tmp_path)
+        if os.path.exists(cleanup_path):
+            os.remove(cleanup_path)
 
 
 @app.post("/api/tattoo/file")
@@ -635,6 +638,9 @@ def view_shared_tattoo(share_key: str, request: Request):
     user_name = email
     if user_doc.exists:
         user_name = user_doc.to_dict().get("name", email)
+    
+    import html
+    user_name = html.escape(user_name)
         
     doc = db.collection(u'users').document(email).collection(u'tattoos').document(tattoo_id).get()
     if not doc.exists:
