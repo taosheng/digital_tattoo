@@ -8,8 +8,8 @@ from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPExcep
 import string
 import random
 import base64
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
+import secrets
+from src.backend.utils.crypto import generate_aes_key, encrypt_data, decrypt_data
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
@@ -143,11 +143,10 @@ def create_string_tattoo(req: StringTattooRequest, email: str = Depends(verify_t
         aes_key_str = None
         upload_data = req.string_data
         if req.encrypt:
-            aes_key_str = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+            aes_key_str = generate_aes_key()
             aes_key = aes_key_str.encode('utf-8')
-            cipher = AES.new(aes_key, AES.MODE_CBC)
-            ct_bytes = cipher.encrypt(pad(req.string_data.encode('utf-8'), AES.block_size))
-            upload_data = base64.b64encode(cipher.iv + ct_bytes).decode('utf-8')
+            encrypted_bytes = encrypt_data(req.string_data.encode('utf-8'), aes_key)
+            upload_data = base64.b64encode(encrypted_bytes).decode('utf-8')
 
         signatures = tattoo.ar_upload_string(upload_data, new_tattoo_id, email)
         new_points = points - 1
@@ -229,8 +228,7 @@ def process_file_upload_worker(
         
         if encrypt and aes_key_str:
             aes_key = aes_key_str.encode('utf-8')
-            cipher = AES.new(aes_key, AES.MODE_CBC)
-            tattoo_content = cipher.iv + cipher.encrypt(pad(tattoo_content, AES.block_size))
+            tattoo_content = encrypt_data(tattoo_content, aes_key)
         
         with open(tattoo_tmp_path, "wb") as f:
             f.write(tattoo_content)
@@ -278,11 +276,19 @@ def process_file_upload_worker(
                 if target_directory_id:
                     upload_url += f"?directory_id={target_directory_id}"
                     
+                vs_content = content
+                vs_webp_content = webp_content
+                if encrypt and aes_key_str:
+                    aes_key = aes_key_str.encode('utf-8')
+                    vs_content = encrypt_data(content, aes_key)
+                    if is_image and webp_content:
+                        vs_webp_content = encrypt_data(webp_content, aes_key)
+                    
                 # Upload original file
                 hx1 = httpx.post(
                     upload_url,
                     headers={"X-Api-Key": VAULTSAGE_API_KEY},
-                    files=[('files', (filename, content, content_type))],
+                    files=[('files', (filename, vs_content, content_type))],
                     timeout=360.0
                 )
                 print("VaultSage Original File Backup status:", hx1.status_code)
@@ -293,7 +299,7 @@ def process_file_upload_worker(
                     hx2 = httpx.post(
                         upload_url,
                         headers={"X-Api-Key": VAULTSAGE_API_KEY},
-                        files=[('files', (webp_filename, webp_content, "image/webp"))],
+                        files=[('files', (webp_filename, vs_webp_content, "image/webp"))],
                         timeout=360.0
                     )
                     print("VaultSage WebP File Backup status:", hx2.status_code)
@@ -370,7 +376,7 @@ async def create_file_tattoo(
     
     aes_key_str = None
     if is_encrypt:
-        aes_key_str = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+        aes_key_str = generate_aes_key()
     
     # Pre-allocate the record and deduct points
     new_points = points - 1
@@ -455,9 +461,7 @@ def read_tattoo(tattoo_id: str, fallback_solana: bool = False, decryption_key: s
         if is_encrypted:
             try:
                 ct_bytes = base64.b64decode(text)
-                iv = ct_bytes[:16]
-                cipher = AES.new(stored_key.encode('utf-8'), AES.MODE_CBC, iv)
-                text = unpad(cipher.decrypt(ct_bytes[16:]), AES.block_size).decode('utf-8')
+                text = decrypt_data(ct_bytes, stored_key.encode('utf-8')).decode('utf-8')
             except Exception as e:
                 raise HTTPException(status_code=500, detail="Decryption failed: " + str(e))
                 
@@ -524,18 +528,10 @@ def read_tattoo(tattoo_id: str, fallback_solana: bool = False, decryption_key: s
             if not file_content_bytes:
                 raise HTTPException(status_code=404, detail="Failed to retrieve file tattoo from blockchain")
             
-            if is_encrypted:
-                try:
-                    iv = file_content_bytes[:16]
-                    cipher = AES.new(stored_key.encode('utf-8'), AES.MODE_CBC, iv)
-                    file_content_bytes = unpad(cipher.decrypt(file_content_bytes[16:]), AES.block_size)
-                except Exception as e:
-                    raise HTTPException(status_code=500, detail="Blockchain Decryption failed: " + str(e))
-                    
             file_content = file_content_bytes
             download_filename = webp_filename or filename
             
-            # Cache to VaultSage for next time
+            # Cache to VaultSage for next time (cache the encrypted payload)
             if VAULTSAGE_API_KEY and file_content:
                 try:
                     vaultsage_path = email.replace('@', '_at_').replace('.', '_')
@@ -573,6 +569,13 @@ def read_tattoo(tattoo_id: str, fallback_solana: bool = False, decryption_key: s
                     print(f"Cached to VaultSage: {download_filename}, status: {cache_res.status_code}")
                 except Exception as cache_err:
                     print(f"Failed to cache to VaultSage: {cache_err}")
+                    
+        # Now we have file_content from either VaultSage or Blockchain, decrypt if needed
+        if is_encrypted:
+            try:
+                file_content = decrypt_data(file_content, stored_key.encode('utf-8'))
+            except Exception as e:
+                raise HTTPException(status_code=500, detail="Decryption failed: " + str(e))
             
         return StreamingResponse(io.BytesIO(file_content), media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{download_filename}"'})
 
@@ -604,7 +607,7 @@ def generate_share_link(tattoo_id: str, email: str = Depends(verify_token)):
 
 
 @app.get("/api/tattoo/share_image/{share_key}")
-def get_shared_image(share_key: str):
+def get_shared_image(share_key: str, key: str = None):
     if not db:
         raise HTTPException(status_code=500, detail="Database disabled.")
     
@@ -624,6 +627,12 @@ def get_shared_image(share_key: str):
     if t_data.get("type") != "file":
         raise HTTPException(status_code=400, detail="Not a file tattoo.")
         
+    is_encrypted = t_data.get("is_encrypted", False)
+    stored_key = t_data.get("encryption_key")
+    if is_encrypted:
+        if not key or key != stored_key:
+            raise HTTPException(status_code=403, detail="Invalid or missing decryption key")
+            
     filename = t_data.get("filename")
     webp_filename = t_data.get("webp_filename")
     blockchain = t_data.get("blockchain", "solana")
@@ -674,13 +683,19 @@ def get_shared_image(share_key: str):
     if not file_content:
         raise HTTPException(status_code=404, detail="File not found anywhere.")
         
+    if is_encrypted:
+        try:
+            file_content = decrypt_data(file_content, stored_key.encode('utf-8'))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Decryption failed: " + str(e))
+        
     import mimetypes
     content_type = mimetypes.guess_type(webp_filename or filename)[0] or "application/octet-stream"
     return StreamingResponse(io.BytesIO(file_content), media_type=content_type)
 
 
 @app.get("/tattoo/{share_key}", response_class=HTMLResponse)
-def view_shared_tattoo(share_key: str, request: Request):
+def view_shared_tattoo(share_key: str, request: Request, key: str = None):
     if not db:
         return HTMLResponse("<h1>Database disabled.</h1>", status_code=500)
         
@@ -708,6 +723,35 @@ def view_shared_tattoo(share_key: str, request: Request):
     t_type = t_data.get("type")
     blockchain = t_data.get("blockchain", "solana")
     signatures = t_data.get("signatures", [])
+    is_encrypted = t_data.get("is_encrypted", False)
+    stored_key = t_data.get("encryption_key")
+    
+    if is_encrypted and (not key or key != stored_key):
+        prompt_html = f"""
+        <!DOCTYPE html>
+        <html lang="zh-TW">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>這是 {{user_name}} 的數位刺青!</title>
+            <style>
+                body {{ font-family: sans-serif; background-color: #f9f9f9; text-align: center; padding-top: 50px; }}
+                input[type="text"], input[type="password"] {{ padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; width: 300px; max-width: 80%; }}
+                button {{ padding: 10px 20px; font-size: 16px; background-color: #8a2be2; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }}
+            </style>
+        </head>
+        <body>
+            <h2 style="color: #8a2be2;">這個數位刺青已被加密保護</h2>
+            <p>請輸入解密金鑰以檢視內容</p>
+            <form method="GET" action="/tattoo/{share_key}">
+                <input type="password" name="key" placeholder="Enter decryption key..." required />
+                <br>
+                <button type="submit">解鎖 (Unlock)</button>
+            </form>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=prompt_html)
     
     # Get tx link
     tx_link = "#"
@@ -736,17 +780,33 @@ def view_shared_tattoo(share_key: str, request: Request):
             except:
                 text = "Failed to fetch from Solana."
                 
+        if is_encrypted and text and "Pending indexing" not in text and "Failed to fetch" not in text:
+            try:
+                import base64
+                ct_bytes = base64.b64decode(text)
+                text = decrypt_data(ct_bytes, stored_key.encode('utf-8')).decode('utf-8')
+            except Exception as e:
+                text = "Decryption failed or data corrupted."
+                
         # safe html escape
         import html
         text = html.escape(text)
         content_html = f'<textarea readonly style="width: 100%; height: 300px; padding: 15px; font-size: 1.2rem; color: black; background-color: #f0fff0; border-radius: 8px; border: 1px solid #ccc; resize: none;">{text}</textarea>'
     else:
-        content_html = f'<div style="text-align: center;"><img src="/api/tattoo/share_image/{share_key}" style="max-width: 100%; max-height: 70vh; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" /></div>'
+        img_src = f"/api/tattoo/share_image/{share_key}"
+        if key:
+            import urllib.parse
+            img_src += f"?key={urllib.parse.quote(key)}"
+        content_html = f'<div style="text-align: center;"><img src="{img_src}" style="max-width: 100%; max-height: 70vh; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" /></div>'
         
     base_url = str(request.base_url).rstrip('/')
     og_image_tag = ""
     if t_type == "file":
-        og_image_tag = f'<meta property="og:image" content="{base_url}/api/tattoo/share_image/{share_key}" />'
+        img_src_og = f"{base_url}/api/tattoo/share_image/{share_key}"
+        if key:
+            import urllib.parse
+            img_src_og += f"?key={urllib.parse.quote(key)}"
+        og_image_tag = f'<meta property="og:image" content="{img_src_og}" />'
     
     html_content = f"""
     <!DOCTYPE html>
