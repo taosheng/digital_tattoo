@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
-from firebase_admin import credentials, firestore, initialize_app
+from firebase_admin import firestore
 from dotenv import load_dotenv
 from PIL import Image
 
@@ -29,17 +29,7 @@ import tattoo
 
 load_dotenv()
 
-# Initialize Firebase via Service Account (saltycat.json)
-cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "saltycat.json")
-try:
-    cred = credentials.Certificate(cred_path)
-    initialize_app(cred)
-    from google.cloud import firestore as gc_firestore
-    # Explicitly connect to the 'tattoo' database instead of '(default)'
-    db = gc_firestore.Client(database="tattoo", project=cred.project_id)
-except Exception as e:
-    print(f"Warning: Failed to initialize Firestore from {cred_path}. Emulating db. {e}")
-    db = None
+from src.backend.dependencies import db, verify_token
 
 app = FastAPI()
 app.add_middleware(
@@ -50,8 +40,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-security = HTTPBearer()
-
 VAULTSAGE_API_KEY = os.environ.get("VAULTSAGE_API_KEY")
 
 class LoginRequest(BaseModel):
@@ -60,14 +48,6 @@ class LoginRequest(BaseModel):
 class StringTattooRequest(BaseModel):
     string_data: str
     encrypt: bool = False
-
-def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
-    # Simple check for our JWT which we are returning directly. In production, sign cookies.
-    # For simplicity, our frontend uses the user email as the sessionToken mock if we bypass complex signing.
-    token = credentials.credentials
-    if not token:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return token
 
 @app.post("/api/auth/google")
 def auth_google(req: LoginRequest):
