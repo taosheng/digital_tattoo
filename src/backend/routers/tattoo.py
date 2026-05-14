@@ -13,11 +13,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from firebase_admin import firestore
 
 # Import tattoo functions
-import sys
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if BASE_DIR not in sys.path:
-    sys.path.append(BASE_DIR)
-import tattoo
+from src import tattoo
 
 from src.backend.dependencies import db, verify_token
 from src.backend.utils.crypto import generate_aes_key, encrypt_data, decrypt_data
