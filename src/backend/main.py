@@ -14,8 +14,6 @@ from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
 from firebase_admin import firestore
 from dotenv import load_dotenv
 from PIL import Image
@@ -30,8 +28,11 @@ import tattoo
 load_dotenv()
 
 from src.backend.dependencies import db, verify_token
+from src.backend.routers import auth
 
 app = FastAPI()
+app.include_router(auth.router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -42,56 +43,9 @@ app.add_middleware(
 
 VAULTSAGE_API_KEY = os.environ.get("VAULTSAGE_API_KEY")
 
-class LoginRequest(BaseModel):
-    token: str
-
 class StringTattooRequest(BaseModel):
     string_data: str
     encrypt: bool = False
-
-@app.post("/api/auth/google")
-def auth_google(req: LoginRequest):
-    try:
-        idinfo = id_token.verify_oauth2_token(
-            req.token, 
-            google_requests.Request(), 
-            os.environ.get("VITE_GOOGLE_CLIENT_ID")
-        )
-        email = idinfo['email']
-        name = idinfo.get('name', 'User')
-        
-        # Check Firestore
-        points = 5
-        if db:
-            doc_ref = db.collection(u'users').document(email)
-            doc = doc_ref.get()
-            if doc.exists:
-                data = doc.to_dict()
-                points = data.get('points', 0)
-                doc_ref.update({"last_login": datetime.utcnow().isoformat()})
-                if "latest_ID" not in data:
-                    doc_ref.update({"latest_ID": 99})
-            else:
-                doc_ref.set({
-                    "email": email,
-                    "name": name,
-                    "google_id": idinfo['sub'],
-                    "points": points,
-                    "latest_ID": 99,
-                    "first_signup": datetime.utcnow().isoformat(),
-                    "last_login": datetime.utcnow().isoformat()
-                })
-                
-        return {
-            "session_token": email, # Using email as mock token
-            "user": {
-                "name": name,
-                "email": email,
-                "points": points
-            }
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid Token: {str(e)}")
 
 @app.get("/api/tattoo/list")
 def get_tattoo_list(email: str = Depends(verify_token)):
