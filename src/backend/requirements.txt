@@ -9,3 +9,4 @@ python-dotenv==1.0.1
 solana==0.33.0
 solders==0.21.0
 arweave-python-client
+pycryptodome==3.20.0

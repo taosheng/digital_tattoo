@@ -7,6 +7,9 @@ from pydantic import BaseModel
 from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPException, Security, BackgroundTasks
 import string
 import random
+import base64
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
@@ -56,6 +59,7 @@ class LoginRequest(BaseModel):
 
 class StringTattooRequest(BaseModel):
     string_data: str
+    encrypt: bool = False
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
     # Simple check for our JWT which we are returning directly. In production, sign cookies.
@@ -136,7 +140,16 @@ def create_string_tattoo(req: StringTattooRequest, email: str = Depends(verify_t
     new_tattoo_id = str(latest_id + 1)
     
     try:
-        signatures = tattoo.ar_upload_string(req.string_data, new_tattoo_id, email)
+        aes_key_str = None
+        upload_data = req.string_data
+        if req.encrypt:
+            aes_key_str = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+            aes_key = aes_key_str.encode('utf-8')
+            cipher = AES.new(aes_key, AES.MODE_CBC)
+            ct_bytes = cipher.encrypt(pad(req.string_data.encode('utf-8'), AES.block_size))
+            upload_data = base64.b64encode(cipher.iv + ct_bytes).decode('utf-8')
+
+        signatures = tattoo.ar_upload_string(upload_data, new_tattoo_id, email)
         new_points = points - 1
         doc_ref.update({"points": new_points, "latest_ID": latest_id + 1})
         
@@ -147,9 +160,11 @@ def create_string_tattoo(req: StringTattooRequest, email: str = Depends(verify_t
             "blockchain": "arweave",
             "preview": req.string_data[:20] + ("..." if len(req.string_data) > 20 else ""),
             "signatures": signatures,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            "is_encrypted": req.encrypt,
+            "encryption_key": aes_key_str
         })
-        return {"success": True, "new_points": new_points}
+        return {"success": True, "new_points": new_points, "encryption_key": aes_key_str}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -160,7 +175,9 @@ def process_file_upload_worker(
     original_size: int,
     email: str,
     new_tattoo_id: str,
-    doc_ref
+    doc_ref,
+    encrypt: bool = False,
+    aes_key_str: str = None
 ):
     t_ref = doc_ref.collection(u'tattoos').document(new_tattoo_id)
     tmp_path = f"/tmp/tattoo_{new_tattoo_id}"
@@ -209,6 +226,11 @@ def process_file_upload_worker(
         tattoo_content = webp_content if is_image else content
         # Use a .webp extension for images so mimetypes.guess_type() works correctly on-chain
         tattoo_tmp_path = f"{tmp_path}.webp" if is_image else tmp_path
+        
+        if encrypt and aes_key_str:
+            aes_key = aes_key_str.encode('utf-8')
+            cipher = AES.new(aes_key, AES.MODE_CBC)
+            tattoo_content = cipher.iv + cipher.encrypt(pad(tattoo_content, AES.block_size))
         
         with open(tattoo_tmp_path, "wb") as f:
             f.write(tattoo_content)
@@ -318,10 +340,13 @@ def process_file_upload_worker(
 async def create_file_tattoo(
     background_tasks: BackgroundTasks, 
     file: UploadFile = File(...), 
+    encrypt: str = Form("false"),
     email: str = Depends(verify_token)
 ):
     if not db:
         raise HTTPException(status_code=500, detail="Database disabled.")
+        
+    is_encrypt = encrypt.lower() == "true"
         
     doc_ref = db.collection(u'users').document(email)
     user_data = doc_ref.get().to_dict()
@@ -343,6 +368,10 @@ async def create_file_tattoo(
     if file.content_type not in valid_image_types:
         raise HTTPException(status_code=400, detail=f"Unsupported file type ({file.content_type}). Only images are allowed.")
     
+    aes_key_str = None
+    if is_encrypt:
+        aes_key_str = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+    
     # Pre-allocate the record and deduct points
     new_points = points - 1
     doc_ref.update({"points": new_points, "latest_ID": latest_id + 1})
@@ -354,7 +383,9 @@ async def create_file_tattoo(
         "blockchain": "arweave",
         "original_filename": file.filename,
         "uploading_status": "starting",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
+        "is_encrypted": is_encrypt,
+        "encryption_key": aes_key_str
     })
     
     # Spawn background task
@@ -366,14 +397,16 @@ async def create_file_tattoo(
         original_size,
         email,
         new_tattoo_id,
-        doc_ref
+        doc_ref,
+        is_encrypt,
+        aes_key_str
     )
         
-    return {"success": True, "new_points": new_points, "tattoo_id": new_tattoo_id}
+    return {"success": True, "new_points": new_points, "tattoo_id": new_tattoo_id, "encryption_key": aes_key_str}
 
 
 @app.get("/api/tattoo/read/{tattoo_id}")
-def read_tattoo(tattoo_id: str, fallback_solana: bool = False, email: str = Depends(verify_token)):
+def read_tattoo(tattoo_id: str, fallback_solana: bool = False, decryption_key: str = None, email: str = Depends(verify_token)):
     if not db:
         raise HTTPException(status_code=500, detail="Database disabled.")
     
@@ -385,6 +418,12 @@ def read_tattoo(tattoo_id: str, fallback_solana: bool = False, email: str = Depe
     t_data = doc.to_dict()
     t_type = t_data.get("type")
     blockchain = t_data.get("blockchain", "solana")  # default to solana for old records
+    is_encrypted = t_data.get("is_encrypted", False)
+    stored_key = t_data.get("encryption_key")
+    
+    if is_encrypted:
+        if not decryption_key or decryption_key != stored_key:
+            raise HTTPException(status_code=400, detail="Invalid decryption key")
     
     if t_type == "string":
         signatures = t_data.get("signatures", [])
@@ -412,6 +451,16 @@ def read_tattoo(tattoo_id: str, fallback_solana: bool = False, email: str = Depe
             if blockchain == "arweave":
                 return {"type": "string", "content": None, "pending": True}
             raise HTTPException(status_code=404, detail="Failed to retrieve string tattoo.")
+            
+        if is_encrypted:
+            try:
+                ct_bytes = base64.b64decode(text)
+                iv = ct_bytes[:16]
+                cipher = AES.new(stored_key.encode('utf-8'), AES.MODE_CBC, iv)
+                text = unpad(cipher.decrypt(ct_bytes[16:]), AES.block_size).decode('utf-8')
+            except Exception as e:
+                raise HTTPException(status_code=500, detail="Decryption failed: " + str(e))
+                
         return {"type": "string", "content": text}
         
     elif t_type == "file":
@@ -474,6 +523,15 @@ def read_tattoo(tattoo_id: str, fallback_solana: bool = False, email: str = Depe
                 
             if not file_content_bytes:
                 raise HTTPException(status_code=404, detail="Failed to retrieve file tattoo from blockchain")
+            
+            if is_encrypted:
+                try:
+                    iv = file_content_bytes[:16]
+                    cipher = AES.new(stored_key.encode('utf-8'), AES.MODE_CBC, iv)
+                    file_content_bytes = unpad(cipher.decrypt(file_content_bytes[16:]), AES.block_size)
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail="Blockchain Decryption failed: " + str(e))
+                    
             file_content = file_content_bytes
             download_filename = webp_filename or filename
             

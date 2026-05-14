@@ -43,6 +43,12 @@ document.querySelector('#app').innerHTML = `
               <label id="lbl-string-msg">訊息 (最多 1000 字元)</label>
               <textarea id="string-input" rows="4" maxlength="1000" required></textarea>
             </div>
+            <div class="form-group" style="margin-bottom: 8px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="string-encrypt" />
+                <span id="lbl-string-encrypt">加密刺青</span>
+              </label>
+            </div>
             <button type="submit" id="btn-string">刺進區塊鏈</button>
           </form>
         </div>
@@ -54,6 +60,12 @@ document.querySelector('#app').innerHTML = `
             <div class="form-group">
               <label id="lbl-file-msg">圖檔 (最大 10MB。圖片將自動壓縮)</label>
               <input type="file" id="file-input" required />
+            </div>
+            <div class="form-group" style="margin-bottom: 8px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="file-encrypt" />
+                <span id="lbl-file-encrypt">加密刺青</span>
+              </label>
             </div>
             <button type="submit" id="btn-file">刺進區塊鏈</button>
           </form>
@@ -133,9 +145,9 @@ async function loadTattoos() {
            ? `<span class="badge string">${typeBadgeText}</span>` 
            : `<span class="badge file">${fileBadgeText}</span>`;
            
-         const displayTitle = t.type === 'string' 
+         const displayTitle = (t.type === 'string' 
            ? (t.preview || "String Tattoo " + t.tattoo_id)
-           : (t.original_filename || t.filename || "File Tattoo " + t.tattoo_id);
+           : (t.original_filename || t.filename || "File Tattoo " + t.tattoo_id)) + (t.is_encrypted ? " 🔒" : "");
            
          let statusHtml = '';
          if (t.uploading_status && t.uploading_status !== 'done') {
@@ -165,7 +177,7 @@ async function loadTattoos() {
              const btnText = langText === 'zh' ? "查看文字" : "View String";
              actionButtons = `
                <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end;">
-                   <button class="action-btn" onclick="downloadTattoo('${t.tattoo_id}', false, event)" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(255,255,255,0.85); border: 1px solid var(--glass-border); color: #111; border-radius: 4px; cursor: pointer; font-weight: 500;">${btnText}</button>
+                   <button class="action-btn" onclick="downloadTattoo('${t.tattoo_id}', ${!!t.is_encrypted}, false, event)" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(255,255,255,0.85); border: 1px solid var(--glass-border); color: #111; border-radius: 4px; cursor: pointer; font-weight: 500;">${btnText}</button>
                    ${txButton}
                    ${shareButton}
                </div>
@@ -174,7 +186,7 @@ async function loadTattoos() {
              const cacheBtnText = langText === 'zh' ? "下載檔案" : "Download File";
              actionButtons = `
                <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end;">
-                   <button class="action-btn" onclick="downloadTattoo('${t.tattoo_id}', false, event)" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(255,255,255,0.85); border: 1px solid var(--glass-border); color: #111; border-radius: 4px; cursor: pointer; font-weight: 500;">${cacheBtnText}</button>
+                   <button class="action-btn" onclick="downloadTattoo('${t.tattoo_id}', ${!!t.is_encrypted}, false, event)" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(255,255,255,0.85); border: 1px solid var(--glass-border); color: #111; border-radius: 4px; cursor: pointer; font-weight: 500;">${cacheBtnText}</button>
                    ${txButton}
                    ${shareButton}
                </div>
@@ -221,9 +233,17 @@ async function loadTattoos() {
   }
 }
 
-window.downloadTattoo = async (id, forceFallback = false, e = null) => {
+window.downloadTattoo = async (id, isEncrypted = false, forceFallback = false, e = null) => {
   if(e) e.stopPropagation();
   const lang = document.getElementById('lang-select').value;
+  
+  let decryptionKey = null;
+  if (isEncrypted) {
+      const msg = lang === 'zh' ? "請輸入 16 字元的解密密碼:" : "Please enter the 16-character decryption key:";
+      decryptionKey = prompt(msg);
+      if (!decryptionKey) return; // User cancelled
+  }
+  
   if (forceFallback) {
     showOverlay(lang === 'zh' ? "正在從區塊鏈收集資料中，請耐心等候..." : "Gathering data from blockchain, please wait...");
   } else {
@@ -231,7 +251,10 @@ window.downloadTattoo = async (id, forceFallback = false, e = null) => {
   }
   
   try {
-    const url = forceFallback ? `/api/tattoo/read/${id}?fallback_solana=true` : `/api/tattoo/read/${id}`;
+    let url = forceFallback ? `/api/tattoo/read/${id}?fallback_solana=true` : `/api/tattoo/read/${id}`;
+    if (decryptionKey) {
+        url += (url.includes('?') ? '&' : '?') + `decryption_key=${encodeURIComponent(decryptionKey)}`;
+    }
     const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${window.sessionToken}` }
     });
@@ -244,7 +267,7 @@ window.downloadTattoo = async (id, forceFallback = false, e = null) => {
              ? "這需要數十分鐘的時間，確定要繼續嗎？"
              : "This will take several minutes. Are you sure you want to continue?";
            if (confirm(msg)) {
-               return window.downloadTattoo(id, true);
+               return window.downloadTattoo(id, isEncrypted, true);
            } else {
                return;
            }
@@ -338,7 +361,7 @@ window.showTransactions = (sigs, e = null, bc = 'solana') => {
         <a href="https://github.com/taosheng/digital_tattoo/blob/main/find_your_tattoo_zh_TW.md" target="_blank" style="color: #8b5cf6; font-size: 0.9rem;">${tutorialText}</a>
       </div>
       <div style="margin-bottom: 16px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 6px; border-left: 3px solid #8b5cf6; color: #ccc; font-size: 0.85rem;">
-        ${lang === 'zh' ? '區塊鏈紀錄需要10~20分鐘 如果是剛刺上的請等20再查' : 'Blockchain records take 10-20 minutes. If you just tattooed, please wait 20 mins before checking.'}
+        ${lang === 'zh' ? '區塊鏈紀錄需要10~20分鐘 如果是剛刺上的請等20再查。<br/>若您的刺青有加密，請記得使用 16 字元密碼解密。' : 'Blockchain records take 10-20 minutes. If you just tattooed, please wait 20 mins before checking.<br/>If your tattoo is encrypted, remember to decrypt it using your 16-char key.'}
       </div>
       ${linksHtml}
       <div style="margin-top: 16px; text-align: right;">
@@ -361,6 +384,7 @@ document.getElementById('string-form').addEventListener('submit', async (e) => {
   if (!confirm(msg)) return;
 
   const text = document.getElementById('string-input').value;
+  const isEncrypt = document.getElementById('string-encrypt').checked;
   
   showOverlay("Submitting String Tattoo...");
   try {
@@ -370,11 +394,18 @@ document.getElementById('string-form').addEventListener('submit', async (e) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${window.sessionToken}`
       },
-      body: JSON.stringify({ string_data: text })
+      body: JSON.stringify({ string_data: text, encrypt: isEncrypt })
     });
     const data = await res.json();
     if (res.ok) {
-      alert("String Tattoo uploaded successfully!");
+      if (data.encryption_key) {
+        const msgKey = lang === 'zh' 
+          ? `刺青上傳成功！\n\n【重要】這是您的解密密碼：\n${data.encryption_key}\n\n請務必妥善保存，遺失後將無法解密！` 
+          : `Tattoo uploaded successfully!\n\n[IMPORTANT] Here is your decryption key:\n${data.encryption_key}\n\nPlease keep it safe, if lost you will NOT be able to decrypt!`;
+        prompt(msgKey, data.encryption_key);
+      } else {
+        alert("String Tattoo uploaded successfully!");
+      }
       document.getElementById('user-points').innerText = data.new_points;
       document.getElementById('string-form').reset();
       loadTattoos();
@@ -399,9 +430,11 @@ document.getElementById('file-form').addEventListener('submit', async (e) => {
 
   const fileInput = document.getElementById('file-input');
   if (fileInput.files.length === 0) return;
+  const isEncrypt = document.getElementById('file-encrypt').checked;
   
   const formData = new FormData();
   formData.append("file", fileInput.files[0]);
+  formData.append("encrypt", isEncrypt ? "true" : "false");
   
   showOverlay("Starting File Upload...");
   try {
@@ -414,6 +447,12 @@ document.getElementById('file-form').addEventListener('submit', async (e) => {
     });
     const data = await res.json();
     if (res.ok) {
+      if (data.encryption_key) {
+        const msgKey = lang === 'zh' 
+          ? `刺青上傳開始！\n\n【重要】這是您的解密密碼：\n${data.encryption_key}\n\n請務必妥善保存，遺失後將無法解密！` 
+          : `Tattoo upload started!\n\n[IMPORTANT] Here is your decryption key:\n${data.encryption_key}\n\nPlease keep it safe, if lost you will NOT be able to decrypt!`;
+        prompt(msgKey, data.encryption_key);
+      }
       document.getElementById('user-points').innerText = data.new_points;
       document.getElementById('file-form').reset();
       loadTattoos();
@@ -472,6 +511,9 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lbl-file-msg')) document.getElementById('lbl-file-msg').innerText = "圖檔 (最大 10MB。圖片將自動壓縮)";
     if(document.getElementById('btn-file')) document.getElementById('btn-file').innerText = "刺進區塊鏈";
     
+    if(document.getElementById('lbl-string-encrypt')) document.getElementById('lbl-string-encrypt').innerText = "加密刺青 (我們將隨機產生 16 字元密碼)";
+    if(document.getElementById('lbl-file-encrypt')) document.getElementById('lbl-file-encrypt').innerText = "加密刺青 (我們將隨機產生 16 字元密碼)";
+    
     if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "你的刺青";
     if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "載入中...";
     if(document.getElementById('lnk-add-points')) document.getElementById('lnk-add-points').innerText = "如何增加點數?";
@@ -489,6 +531,9 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lbl-file-msg')) document.getElementById('lbl-file-msg').innerText = "File (Max 10MB. Images auto-compressed)";
     if(document.getElementById('btn-file')) document.getElementById('btn-file').innerText = "Tattoo to Blockchain";
     
+    if(document.getElementById('lbl-string-encrypt')) document.getElementById('lbl-string-encrypt').innerText = "Encrypt Tattoo (We will generate 16 char key)";
+    if(document.getElementById('lbl-file-encrypt')) document.getElementById('lbl-file-encrypt').innerText = "Encrypt Tattoo (We will generate 16 char key)";
+
     if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "Your Tattoos";
     if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "Loading tattoos...";
     if(document.getElementById('lnk-add-points')) document.getElementById('lnk-add-points').innerText = "How to add points?";
