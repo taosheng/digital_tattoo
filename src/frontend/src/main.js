@@ -244,7 +244,7 @@ window.downloadTattoo = async (id, isEncrypted = false, forceFallback = false, e
   
   let decryptionKey = null;
   if (isEncrypted) {
-      const msg = lang === 'zh' ? "請輸入 16 字元的解密密碼:" : "Please enter the 16-character decryption key:";
+      const msg = lang === 'zh' ? "請輸入您的解密密碼:" : "Please enter your decryption key:";
       decryptionKey = prompt(msg);
       if (!decryptionKey) return; // User cancelled
   }
@@ -366,7 +366,7 @@ window.showTransactions = (sigs, e = null, bc = 'solana') => {
         <a href="https://github.com/taosheng/digital_tattoo/blob/main/find_your_tattoo_zh_TW.md" target="_blank" style="color: #8b5cf6; font-size: 0.9rem;">${tutorialText}</a>
       </div>
       <div style="margin-bottom: 16px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 6px; border-left: 3px solid #8b5cf6; color: #ccc; font-size: 0.85rem;">
-        ${lang === 'zh' ? '區塊鏈紀錄需要10~20分鐘 如果是剛刺上的請等20再查。<br/>若您的刺青有加密，請記得使用 16 字元密碼解密。' : 'Blockchain records take 10-20 minutes. If you just tattooed, please wait 20 mins before checking.<br/>If your tattoo is encrypted, remember to decrypt it using your 16-char key.'}
+        ${lang === 'zh' ? '區塊鏈紀錄需要10~20分鐘 如果是剛刺上的請等20再查。<br/>若您的刺青有加密，請記得使用您的解密密碼解密。' : 'Blockchain records take 10-20 minutes. If you just tattooed, please wait 20 mins before checking.<br/>If your tattoo is encrypted, remember to decrypt it using your key.'}
       </div>
       ${linksHtml}
       <div style="margin-top: 16px; text-align: right;">
@@ -516,8 +516,8 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lbl-file-msg')) document.getElementById('lbl-file-msg').innerText = "圖檔 (最大 10MB。圖片將自動壓縮)";
     if(document.getElementById('btn-file')) document.getElementById('btn-file').innerText = "刺進區塊鏈";
     
-    if(document.getElementById('lbl-string-encrypt')) document.getElementById('lbl-string-encrypt').innerText = "加密刺青 (我們將隨機產生 16 字元密碼)";
-    if(document.getElementById('lbl-file-encrypt')) document.getElementById('lbl-file-encrypt').innerText = "加密刺青 (我們將隨機產生 16 字元密碼)";
+    if(document.getElementById('lbl-string-encrypt')) document.getElementById('lbl-string-encrypt').innerText = "加密刺青 (我們將隨機產生密碼)";
+    if(document.getElementById('lbl-file-encrypt')) document.getElementById('lbl-file-encrypt').innerText = "加密刺青 (我們將隨機產生密碼)";
     
     if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "你的刺青";
     if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "載入中...";
@@ -538,8 +538,8 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lbl-file-msg')) document.getElementById('lbl-file-msg').innerText = "File (Max 10MB. Images auto-compressed)";
     if(document.getElementById('btn-file')) document.getElementById('btn-file').innerText = "Tattoo to Blockchain";
     
-    if(document.getElementById('lbl-string-encrypt')) document.getElementById('lbl-string-encrypt').innerText = "Encrypt Tattoo (We will generate 16 char key)";
-    if(document.getElementById('lbl-file-encrypt')) document.getElementById('lbl-file-encrypt').innerText = "Encrypt Tattoo (We will generate 16 char key)";
+    if(document.getElementById('lbl-string-encrypt')) document.getElementById('lbl-string-encrypt').innerText = "Encrypt Tattoo (We will generate a secure key)";
+    if(document.getElementById('lbl-file-encrypt')) document.getElementById('lbl-file-encrypt').innerText = "Encrypt Tattoo (We will generate a secure key)";
 
     if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "Your Tattoos";
     if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "Loading tattoos...";
