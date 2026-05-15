@@ -14,6 +14,9 @@ document.querySelector('#app').innerHTML = `
         你的資料刺進區塊鏈 永遠不會消失！
       </p>
       <div id="google-login-btn-container" style="display: flex; justify-content: center; min-height: 44px;"></div>
+      <div style="text-align: center; margin-top: 2rem;">
+        <a id="lnk-terms-login" href="#" onclick="showTerms(event)" style="font-size: 0.85em; color: #ef4444;">服務條款 (Terms)</a>
+      </div>
     </div>
 
     <div id="dashboard-view" class="hidden">
@@ -27,6 +30,8 @@ document.querySelector('#app').innerHTML = `
             <a id="lnk-operate" href="https://github.com/taosheng/digital_tattoo/blob/main/find_your_tattoo_zh_TW.md" target="_blank" style="font-size: 0.9em; display: inline-block; margin-top: 5px;">自己操作區塊鏈</a>
             <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
             <a id="lnk-add-points" href="#" onclick="showPointsInfo(event)" style="font-size: 0.9em; display: inline-block; margin-top: 5px;">如何增加點數?</a>
+            <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
+            <a id="lnk-terms" href="#" onclick="showTerms(event)" style="font-size: 0.9em; display: inline-block; margin-top: 5px; color: #ef4444;">服務條款 (Terms)</a>
           </div>
           <div class="points-badge">
             <span id="user-points">0</span> Points
@@ -517,6 +522,8 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "你的刺青";
     if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "載入中...";
     if(document.getElementById('lnk-add-points')) document.getElementById('lnk-add-points').innerText = "如何增加點數?";
+    if(document.getElementById('lnk-terms')) document.getElementById('lnk-terms').innerText = "服務條款 (Terms)";
+    if(document.getElementById('lnk-terms-login')) document.getElementById('lnk-terms-login').innerText = "服務條款 (Terms)";
   } else {
     document.getElementById('main-title').innerText = "Digital Tattoo";
     document.getElementById('main-subtitle').innerText = "Permanently immortalize your data on the Blockchain.";
@@ -537,6 +544,8 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "Your Tattoos";
     if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "Loading tattoos...";
     if(document.getElementById('lnk-add-points')) document.getElementById('lnk-add-points').innerText = "How to add points?";
+    if(document.getElementById('lnk-terms')) document.getElementById('lnk-terms').innerText = "Terms of Service";
+    if(document.getElementById('lnk-terms-login')) document.getElementById('lnk-terms-login').innerText = "Terms of Service";
   }
   
   if (window.sessionToken) {
@@ -624,6 +633,44 @@ window.showPointsInfo = (e) => {
       </p>
       <div style="text-align: right;">
         <button onclick="document.getElementById('points-info-modal').remove()" style="padding: 6px 16px; background: rgba(139,92,246,0.3); border: 1px solid rgba(139,92,246,0.5); color: white; border-radius: 6px; cursor: pointer;">${closeText}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', (ev) => { if (ev.target === modal) modal.remove(); });
+};
+
+window.showTerms = (e) => {
+  if (e) e.preventDefault();
+  const lang = document.getElementById('lang-select').value;
+  const closeText = lang === 'zh' ? '關閉' : 'Close';
+  const titleText = lang === 'zh' ? '服務條款與免責聲明' : 'Terms of Service & Disclaimer';
+  const termsHtml = lang === 'zh' 
+    ? `<ul style="padding-left: 20px; line-height: 1.8; color: rgba(255,255,255,0.85); font-size: 0.95rem;">
+        <li style="margin-bottom: 12px;"><strong>資料所有權：</strong>本網站 (tt.saltycat.tw) <strong>不擁有</strong>您上傳的文字或檔案。所有資料一旦上傳，將永久寫入區塊鏈。</li>
+        <li style="margin-bottom: 12px;"><strong>免責聲明：</strong>一旦資料寫入區塊鏈，本網站對該資料<strong>不承擔任何法律責任</strong>。使用者須為其上傳之內容負擔全責。</li>
+        <li style="margin-bottom: 12px;"><strong>資料保管：</strong>我們<strong>不負責長期保存您的資料</strong>。本網站僅為一項工具服務，提供上傳、加密與產生分享連結的便利介面，協助您更方便地讀寫區塊鏈資料。</li>
+        <li style="margin-bottom: 12px;"><strong>不可刪除性：</strong>區塊鏈具有不可篡改性，我們<strong>絕對無法協助您刪除或修改</strong>任何已上傳至區塊鏈的資料。請於上傳前謹慎確認。</li>
+      </ul>`
+    : `<ul style="padding-left: 20px; line-height: 1.8; color: rgba(255,255,255,0.85); font-size: 0.95rem;">
+        <li style="margin-bottom: 12px;"><strong>Data Ownership:</strong> This website (tt.saltycat.tw) <strong>does NOT own</strong> your uploaded strings or files. All data is permanently written to the blockchain.</li>
+        <li style="margin-bottom: 12px;"><strong>Disclaimer of Liability:</strong> We take <strong>NO legal responsibility</strong> for the content once it is uploaded to the blockchain. Users are solely responsible for their uploads.</li>
+        <li style="margin-bottom: 12px;"><strong>Data Retention:</strong> We <strong>do NOT hold responsibility for keeping your data</strong>. We solely provide tools and an interface for uploading, encrypting, and sharing to help you easily interact with the blockchain.</li>
+        <li style="margin-bottom: 12px;"><strong>Immutability:</strong> The blockchain is immutable. We <strong>CANNOT and WILL NOT help you remove or modify</strong> any data once it is on the blockchain. Please upload carefully.</li>
+      </ul>`;
+
+  const existing = document.getElementById('terms-info-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'terms-info-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:1000;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background: var(--bg-dark, #1a1a2e); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 28px; max-width: 550px; width: 90%; max-height: 85vh; overflow-y: auto;">
+      <h3 style="color: #ef4444; margin: 0 0 16px 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">${titleText}</h3>
+      ${termsHtml}
+      <div style="text-align: right; margin-top: 24px;">
+        <button onclick="document.getElementById('terms-info-modal').remove()" style="padding: 8px 24px; background: rgba(139,92,246,0.3); border: 1px solid rgba(139,92,246,0.5); color: white; border-radius: 6px; cursor: pointer; font-weight: bold;">${closeText}</button>
       </div>
     </div>
   `;
