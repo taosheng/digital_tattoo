@@ -8,8 +8,9 @@ document.querySelector('#app').innerHTML = `
         <option value="en" style="color: black;">English</option>
       </select>
     </div>
-    <div id="login-view" class="glass-panel" style="margin-top: 40px;">
-      <h1 id="main-title">數位刺青</h1>
+    <div id="login-view" class="glass-panel" style="margin-top: 40px; text-align: center;">
+      <img src="/icon.svg" alt="Digital Tattoo Logo" style="width: 80px; height: 80px; margin-bottom: 10px; filter: drop-shadow(0 0 10px rgba(138,43,226,0.5));" />
+      <h1 id="main-title" style="margin-top: 0;">數位刺青</h1>
       <p id="main-subtitle" style="text-align: center; color: var(--text-secondary); margin-bottom: 2rem;">
         你的資料刺進區塊鏈 永遠不會消失！
       </p>
@@ -21,9 +22,11 @@ document.querySelector('#app').innerHTML = `
 
     <div id="dashboard-view" class="hidden">
       <div class="glass-panel" style="margin-bottom: 2rem;">
-        <div class="user-info">
-          <div>
-            <h2 id="user-name">Welcome!</h2>
+        <div class="user-info" style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 15px;">
+            <img src="/icon.svg" alt="Digital Tattoo Logo" style="width: 50px; height: 50px; filter: drop-shadow(0 0 5px rgba(138,43,226,0.5));" id="dashboard-logo" />
+            <div>
+              <h2 id="user-name" style="margin-top: 0;">Welcome!</h2>
             <p id="user-email" style="color: var(--text-secondary);"></p>
             <a id="lnk-what-is" href="https://www.5233.space/2026/05/tattoo.html" target="_blank" style="font-size: 0.9em; display: inline-block; margin-top: 5px;">什麼是數位刺青</a>
             <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
@@ -32,6 +35,7 @@ document.querySelector('#app').innerHTML = `
             <a id="lnk-add-points" href="#" onclick="showPointsInfo(event)" style="font-size: 0.9em; display: inline-block; margin-top: 5px;">如何增加點數?</a>
             <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
             <a id="lnk-terms" href="#" onclick="showTerms(event)" style="font-size: 0.9em; display: inline-block; margin-top: 5px; color: #ef4444;">服務條款 (Terms)</a>
+            </div>
           </div>
           <div class="points-badge">
             <span id="user-points">0</span> Points

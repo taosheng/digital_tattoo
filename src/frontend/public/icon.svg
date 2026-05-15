@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a2e" />
+      <stop offset="100%" stop-color="#16213e" />
+    </linearGradient>
+    <linearGradient id="tattoo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00d2ff" />
+      <stop offset="100%" stop-color="#8a2be2" />
+    </linearGradient>
+  </defs>
+
+  <!-- Cat base -->
+  <path d="M 20 50 L 25 20 L 45 35 Q 60 30 75 35 L 95 20 L 100 50 Q 110 80 85 100 Q 60 115 35 100 Q 10 80 20 50 Z" fill="#1a1a2e" stroke="url(#tattoo-grad)" stroke-width="4" stroke-linejoin="round"/>
+  
+  <!-- Inner ears -->
+  <path d="M 28 32 L 30 25 L 42 37" fill="none" stroke="#00d2ff" stroke-width="2" stroke-linecap="round" />
+  <path d="M 92 32 L 90 25 L 78 37" fill="none" stroke="#8a2be2" stroke-width="2" stroke-linecap="round" />
+
+  <!-- Eyes -->
+  <path d="M 35 65 Q 42 58 50 65 Q 42 70 35 65 Z" fill="#00d2ff" />
+  <path d="M 85 65 Q 78 58 70 65 Q 78 70 85 65 Z" fill="#8a2be2" />
+
+  <!-- Nose -->
+  <polygon points="56,78 64,78 60,83" fill="#fff" />
+  
+  <!-- Digital Tattoo / Circuit on Forehead -->
+  <!-- Central node -->
+  <circle cx="60" cy="45" r="4" fill="#fff" />
+  <!-- Left branch -->
+  <circle cx="45" cy="38" r="2.5" fill="#00d2ff" />
+  <path d="M 60 45 L 53 45 L 45 38" fill="none" stroke="#00d2ff" stroke-width="2" />
+  <!-- Right branch -->
+  <circle cx="75" cy="38" r="2.5" fill="#8a2be2" />
+  <path d="M 60 45 L 67 45 L 75 38" fill="none" stroke="#8a2be2" stroke-width="2" />
+  <!-- Top branch -->
+  <circle cx="60" cy="32" r="2.5" fill="#fff" />
+  <path d="M 60 45 L 60 32" fill="none" stroke="#fff" stroke-width="2" />
+
+  <!-- Circuit nodes on cheeks -->
+  <circle cx="30" cy="80" r="2" fill="#00d2ff" />
+  <path d="M 30 80 L 20 80 M 30 80 L 35 90" fill="none" stroke="#00d2ff" stroke-width="1.5" />
+  
+  <circle cx="90" cy="80" r="2" fill="#8a2be2" />
+  <path d="M 90 80 L 100 80 M 90 80 L 85 90" fill="none" stroke="#8a2be2" stroke-width="1.5" />
+
+</svg>
