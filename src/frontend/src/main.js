@@ -28,9 +28,6 @@ document.querySelector('#app').innerHTML = `
           <span id="lbl-line-login">LINE 登入</span>
         </button>
       </div>
-      <div style="text-align: center; margin-top: 2rem;">
-        <a id="lnk-terms-login" href="#" onclick="showTerms(event)" style="font-size: 0.85em; color: #ef4444;">服務條款 (Terms)</a>
-      </div>
     </div>
 
     <div id="dashboard-view" class="hidden">
@@ -595,7 +592,6 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "載入中...";
     if(document.getElementById('lnk-add-points')) document.getElementById('lnk-add-points').innerText = "如何增加點數?";
     if(document.getElementById('lnk-terms')) document.getElementById('lnk-terms').innerText = "服務條款 (Terms)";
-    if(document.getElementById('lnk-terms-login')) document.getElementById('lnk-terms-login').innerText = "服務條款 (Terms)";
     if(document.getElementById('lnk-privacy')) document.getElementById('lnk-privacy').innerText = "隱私權政策";
     if(document.getElementById('lnk-terms-static')) document.getElementById('lnk-terms-static').innerText = "服務條款";
     if(document.getElementById('lnk-deletion')) document.getElementById('lnk-deletion').innerText = "資料刪除";
@@ -621,7 +617,6 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "Loading tattoos...";
     if(document.getElementById('lnk-add-points')) document.getElementById('lnk-add-points').innerText = "How to add points?";
     if(document.getElementById('lnk-terms')) document.getElementById('lnk-terms').innerText = "Terms of Service";
-    if(document.getElementById('lnk-terms-login')) document.getElementById('lnk-terms-login').innerText = "Terms of Service";
     if(document.getElementById('lnk-privacy')) document.getElementById('lnk-privacy').innerText = "Privacy Policy";
     if(document.getElementById('lnk-terms-static')) document.getElementById('lnk-terms-static').innerText = "Terms of Service";
     if(document.getElementById('lnk-deletion')) document.getElementById('lnk-deletion').innerText = "Data Deletion";
