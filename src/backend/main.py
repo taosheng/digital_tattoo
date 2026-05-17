@@ -6,12 +6,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from src.backend.routers import auth, tattoo, share
+from src.backend.routers import auth, tattoo, share, merge
 
 app = FastAPI()
 app.include_router(auth.router)
 app.include_router(tattoo.router)
 app.include_router(share.router)
+app.include_router(merge.router)
 
 app.add_middleware(
     CORSMiddleware,

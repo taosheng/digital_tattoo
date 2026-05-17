@@ -11,6 +11,7 @@ echo "Using Project ID: $PROJECT_ID"
 GOOGLE_CLIENT_ID=$(grep "^VITE_GOOGLE_CLIENT_ID=" .env | cut -d '=' -f2)
 LINE_CLIENT_ID=$(grep "^VITE_LINE_CLIENT_ID=" .env | cut -d '=' -f2)
 LINE_CLIENT_SECRET=$(grep "^LINE_CLIENT_SECRET=" .env | cut -d '=' -f2)
+XAI_API_KEY=$(grep "^XAI_API_KEY=" .env | cut -d '=' -f2)
 
 echo "Building Docker image for $SERVICE_NAME..."
 # Build from root context using the unified Dockerfile
@@ -33,7 +34,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --allow-unauthenticated \
     --memory 2Gi \
     --port 8080 \
-    --set-env-vars LINE_CLIENT_SECRET="$LINE_CLIENT_SECRET"
+    --set-env-vars LINE_CLIENT_SECRET="$LINE_CLIENT_SECRET",XAI_API_KEY="$XAI_API_KEY"
 
 # Get Service URL
 SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --platform managed --region $REGION --format 'value(status.url)')

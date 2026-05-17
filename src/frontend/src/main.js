@@ -16,10 +16,10 @@ document.querySelector('#app').innerHTML = `
       </div>
     </div>
     <div id="login-view" class="glass-panel" style="margin-top: 40px; text-align: center;">
-      <img src="/icon.svg" alt="Digital Tattoo Logo" style="width: 80px; height: 80px; margin-bottom: 10px; filter: drop-shadow(0 0 10px rgba(138,43,226,0.5));" />
-      <h1 id="main-title" style="margin-top: 0;">數位刺青</h1>
+      <img src="/icon.svg" alt="Digital Tool Logo" style="width: 80px; height: 80px; margin-bottom: 10px; filter: drop-shadow(0 0 10px rgba(138,43,226,0.5));" />
+      <h1 id="main-title" style="margin-top: 0;">數位小工具</h1>
       <p id="main-subtitle" style="text-align: center; color: var(--text-secondary); margin-bottom: 2rem;">
-        你的資料刺進區塊鏈 永遠不會消失！
+        實用的區塊鏈與 AI 工具集合！
       </p>
       <div id="google-login-btn-container" style="display: flex; justify-content: center; min-height: 44px; margin-bottom: 1rem;"></div>
       <div id="line-login-btn-container" style="display: flex; justify-content: center; min-height: 44px;">
@@ -53,9 +53,15 @@ document.querySelector('#app').innerHTML = `
         </div>
       </div>
       
-      <div class="dashboard-grid">
-        <!-- String Tattoo -->
-        <div class="glass-panel">
+      <div class="tabs-nav" style="display: flex; gap: 10px; margin-bottom: 2rem;">
+        <button id="tab-btn-tattoo" class="tab-btn active" onclick="switchTab('tattoo')">數位刺青 (Digital Tattoo)</button>
+        <button id="tab-btn-merge" class="tab-btn" onclick="switchTab('merge')">超級合體 (Super Merge)</button>
+      </div>
+
+      <div id="tab-content-tattoo">
+        <div class="dashboard-grid">
+          <!-- String Tattoo -->
+          <div class="glass-panel">
           <h2 id="lbl-create-string">建立字串刺青</h2>
           <form id="string-form">
             <div class="form-group">
@@ -97,6 +103,39 @@ document.querySelector('#app').innerHTML = `
             <p id="lbl-loading" style="color: var(--text-secondary)">載入中...</p>
          </div>
       </div>
+      </div> <!-- End tab-content-tattoo -->
+
+      <!-- Super Merge Tab -->
+      <div id="tab-content-merge" class="hidden">
+        <div class="glass-panel" style="text-align: center;">
+          <h2 id="lbl-super-merge">超級合體</h2>
+          <p id="lbl-merge-desc" style="color: var(--text-secondary); margin-bottom: 1rem;">上傳兩張圖片，產生全新合體角色！每次消耗 1 點。</p>
+          
+          <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 250px; background: rgba(255,255,255,0.2); padding: 15px; border-radius: 8px;">
+              <h3 id="lbl-merge-left" style="margin-top: 0;">左邊圖片</h3>
+              <input type="file" id="merge-file-1" accept="image/*" style="width: 100%;" onchange="checkMergeFiles()" />
+            </div>
+            <div style="flex: 1; min-width: 250px; background: rgba(255,255,255,0.2); padding: 15px; border-radius: 8px;">
+              <h3 id="lbl-merge-right" style="margin-top: 0;">右邊圖片</h3>
+              <input type="file" id="merge-file-2" accept="image/*" style="width: 100%;" onchange="checkMergeFiles()" />
+            </div>
+          </div>
+          
+          <button id="btn-trigger-merge" class="hidden" onclick="triggerSuperMerge()" style="padding: 10px 30px; font-size: 1.2rem; border-radius: 8px; border: none; background: linear-gradient(135deg, #ff007f, #8a2be2); color: white; cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">超級合體！(消耗 1 點)</button>
+          
+          <div id="merge-result-container" class="hidden" style="margin-top: 2rem;">
+             <h3 id="lbl-merge-result">合體結果</h3>
+             <img id="merge-result-img" src="" style="max-width: 100%; max-height: 400px; border-radius: 12px; border: 3px solid #8a2be2; margin-top: 10px;" />
+             <div style="margin-top: 10px; display: flex; justify-content: center; gap: 10px;">
+                <button id="btn-download-merge" onclick="downloadMergeResult()" style="padding: 8px 20px; background: var(--secondary); border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: #000;">下載圖片</button>
+                <button id="btn-aggressive-merge" onclick="triggerSuperMerge(true)" style="padding: 8px 20px; background: #ef4444; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: #fff;">更強烈的合體！(消耗 1 點)</button>
+             </div>
+             <p id="lbl-merge-vaultsage" style="margin-top: 10px; color: var(--text-secondary); font-size: 0.85em;">結果已備份至 Vaultsage (加密儲存)</p>
+          </div>
+        </div>
+      </div> <!-- End tab-content-merge -->
+
     </div>
   </div>
 
@@ -569,6 +608,98 @@ window.addEventListener('DOMContentLoaded', async () => {
 renderGoogleButton();
 
 // Language Selector Logic
+
+window.switchTab = (tab) => {
+  if (tab === 'tattoo') {
+    document.getElementById('tab-btn-tattoo').classList.add('active');
+    document.getElementById('tab-btn-merge').classList.remove('active');
+    document.getElementById('tab-content-tattoo').classList.remove('hidden');
+    document.getElementById('tab-content-merge').classList.add('hidden');
+  } else {
+    document.getElementById('tab-btn-tattoo').classList.remove('active');
+    document.getElementById('tab-btn-merge').classList.add('active');
+    document.getElementById('tab-content-tattoo').classList.add('hidden');
+    document.getElementById('tab-content-merge').classList.remove('hidden');
+  }
+};
+
+window.checkMergeFiles = () => {
+  const file1 = document.getElementById('merge-file-1').files.length > 0;
+  const file2 = document.getElementById('merge-file-2').files.length > 0;
+  const btn = document.getElementById('btn-trigger-merge');
+  if (file1 && file2) {
+    btn.classList.remove('hidden');
+  } else {
+    btn.classList.add('hidden');
+  }
+};
+
+window.triggerSuperMerge = async (aggressive = false) => {
+  const f1 = document.getElementById('merge-file-1').files[0];
+  const f2 = document.getElementById('merge-file-2').files[0];
+  
+  if (!f1 || !f2) return;
+  
+  // Validate sizes
+  if (f1.size > 10 * 1024 * 1024 || f2.size > 10 * 1024 * 1024) {
+    alert("Files must be smaller than 10MB");
+    return;
+  }
+  
+  const formData = new FormData();
+  formData.append("file1", f1);
+  formData.append("file2", f2);
+  formData.append("aggressive", aggressive ? "true" : "false");
+  
+  showOverlay("Super Merging with AI... This might take a minute.");
+  try {
+    const res = await fetch('/api/merge/super_merge', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${window.sessionToken}`
+      },
+      body: formData
+    });
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('user-points').innerText = data.new_points;
+      
+      const resContainer = document.getElementById('merge-result-container');
+      const resImg = document.getElementById('merge-result-img');
+      resImg.src = data.merged_image_url;
+      resImg.dataset.downloadUrl = data.merged_image_url; // store to download
+      resContainer.classList.remove('hidden');
+    } else {
+      alert("Merge Failed: " + data.detail);
+    }
+  } catch (err) {
+    alert("Network error.");
+  } finally {
+    hideOverlay();
+  }
+};
+
+window.downloadMergeResult = async () => {
+  const url = document.getElementById('merge-result-img').dataset.downloadUrl;
+  if (!url) return;
+  try {
+    // If CORS prevents direct download, we fetch and create a blob URL
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = "super_merge_result.jpg";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (err) {
+    // Fallback if fetch fails due to CORS
+    window.open(url, '_blank');
+  }
+};
+
 document.getElementById('lang-select').addEventListener('change', (e) => {
   const lang = e.target.value;
   if (lang === 'zh') {
@@ -596,6 +727,17 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lnk-terms-static')) document.getElementById('lnk-terms-static').innerText = "服務條款";
     if(document.getElementById('lnk-deletion')) document.getElementById('lnk-deletion').innerText = "資料刪除";
     if(document.getElementById('lbl-line-login')) document.getElementById('lbl-line-login').innerText = "LINE 登入";
+    if(document.getElementById('tab-btn-tattoo')) document.getElementById('tab-btn-tattoo').innerText = "數位刺青 (Digital Tattoo)";
+    if(document.getElementById('tab-btn-merge')) document.getElementById('tab-btn-merge').innerText = "超級合體 (Super Merge)";
+    if(document.getElementById('lbl-super-merge')) document.getElementById('lbl-super-merge').innerText = "超級合體";
+    if(document.getElementById('lbl-merge-desc')) document.getElementById('lbl-merge-desc').innerText = "上傳兩張圖片，產生全新合體角色！每次消耗 1 點。";
+    if(document.getElementById('lbl-merge-left')) document.getElementById('lbl-merge-left').innerText = "左邊圖片";
+    if(document.getElementById('lbl-merge-right')) document.getElementById('lbl-merge-right').innerText = "右邊圖片";
+    if(document.getElementById('btn-trigger-merge')) document.getElementById('btn-trigger-merge').innerText = "超級合體！(消耗 1 點)";
+    if(document.getElementById('lbl-merge-result')) document.getElementById('lbl-merge-result').innerText = "合體結果";
+    if(document.getElementById('btn-download-merge')) document.getElementById('btn-download-merge').innerText = "下載圖片";
+    if(document.getElementById('btn-aggressive-merge')) document.getElementById('btn-aggressive-merge').innerText = "更強烈的合體！(消耗 1 點)";
+    if(document.getElementById('lbl-merge-vaultsage')) document.getElementById('lbl-merge-vaultsage').innerText = "結果已備份至 Vaultsage (加密儲存)";
   } else {
     document.getElementById('main-title').innerText = "Digital Tattoo";
     document.getElementById('main-subtitle').innerText = "Permanently immortalize your data on the Blockchain.";
@@ -621,6 +763,17 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lnk-terms-static')) document.getElementById('lnk-terms-static').innerText = "Terms of Service";
     if(document.getElementById('lnk-deletion')) document.getElementById('lnk-deletion').innerText = "Data Deletion";
     if(document.getElementById('lbl-line-login')) document.getElementById('lbl-line-login').innerText = "Login with LINE";
+    if(document.getElementById('tab-btn-tattoo')) document.getElementById('tab-btn-tattoo').innerText = "Digital Tattoo";
+    if(document.getElementById('tab-btn-merge')) document.getElementById('tab-btn-merge').innerText = "Super Merge";
+    if(document.getElementById('lbl-super-merge')) document.getElementById('lbl-super-merge').innerText = "Super Merge";
+    if(document.getElementById('lbl-merge-desc')) document.getElementById('lbl-merge-desc').innerText = "Upload two images to generate a fusion! Costs 1 point.";
+    if(document.getElementById('lbl-merge-left')) document.getElementById('lbl-merge-left').innerText = "Left Image";
+    if(document.getElementById('lbl-merge-right')) document.getElementById('lbl-merge-right').innerText = "Right Image";
+    if(document.getElementById('btn-trigger-merge')) document.getElementById('btn-trigger-merge').innerText = "Super Merge! (Cost 1 Point)";
+    if(document.getElementById('lbl-merge-result')) document.getElementById('lbl-merge-result').innerText = "Fusion Result";
+    if(document.getElementById('btn-download-merge')) document.getElementById('btn-download-merge').innerText = "Download Image";
+    if(document.getElementById('btn-aggressive-merge')) document.getElementById('btn-aggressive-merge').innerText = "Aggressive Fusion! (Cost 1 Point)";
+    if(document.getElementById('lbl-merge-vaultsage')) document.getElementById('lbl-merge-vaultsage').innerText = "Result backed up to Vaultsage (Encrypted)";
   }
   
   if (window.sessionToken) {

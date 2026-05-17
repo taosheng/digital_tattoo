@@ -228,3 +228,28 @@ button:disabled {
   flex-direction: column;
   color: white;
 }
+
+/* Tabs */
+.tabs-nav {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 1.5rem;
+}
+.tab-btn {
+  padding: 10px 20px;
+  border: none;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  transition: all 0.3s;
+}
+.tab-btn:hover {
+  background: rgba(255, 255, 255, 0.8);
+}
+.tab-btn.active {
+  background: var(--primary);
+  color: white;
+}
