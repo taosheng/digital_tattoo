@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Environment
+.env
+*.env
+client_secret.json
+saltycat.json
+ar_new_wallet_*.json
+ar_wallet_*.json
+ar_accout*
+code.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Frontend
+node_modules/
+dist/
+.vite/
+
+# Temporary/Tests
+test*.py
+*.jpg
+*.png
+*.webp
+download.jpg
+no_checkin
+sink
