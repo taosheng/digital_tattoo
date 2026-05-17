@@ -38,13 +38,6 @@ document.querySelector('#app').innerHTML = `
             <div>
               <h2 id="user-name" style="margin-top: 0;">Welcome!</h2>
             <p id="user-email" style="color: var(--text-secondary);"></p>
-            <a id="lnk-what-is" href="https://www.5233.space/2026/05/tattoo.html" target="_blank" style="font-size: 0.9em; display: inline-block; margin-top: 5px;">什麼是數位刺青</a>
-            <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
-            <a id="lnk-operate" href="https://github.com/taosheng/digital_tattoo/blob/main/find_your_tattoo_zh_TW.md" target="_blank" style="font-size: 0.9em; display: inline-block; margin-top: 5px;">自己操作區塊鏈</a>
-            <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
-            <a id="lnk-add-points" href="#" onclick="showPointsInfo(event)" style="font-size: 0.9em; display: inline-block; margin-top: 5px;">如何增加點數?</a>
-            <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
-            <a id="lnk-terms" href="#" onclick="showTerms(event)" style="font-size: 0.9em; display: inline-block; margin-top: 5px; color: #ef4444;">服務條款 (Terms)</a>
             </div>
           </div>
           <div class="points-badge">
@@ -59,6 +52,15 @@ document.querySelector('#app').innerHTML = `
       </div>
 
       <div id="tab-content-tattoo">
+        <div style="margin-bottom: 1.5rem; text-align: center; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px;">
+          <a id="lnk-what-is" href="https://www.5233.space/2026/05/tattoo.html" target="_blank" style="font-size: 0.9em; display: inline-block;">什麼是數位刺青</a>
+          <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
+          <a id="lnk-operate" href="https://github.com/taosheng/digital_tattoo/blob/main/find_your_tattoo_zh_TW.md" target="_blank" style="font-size: 0.9em; display: inline-block;">自己操作區塊鏈</a>
+          <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
+          <a id="lnk-add-points" href="#" onclick="showPointsInfo(event)" style="font-size: 0.9em; display: inline-block;">如何增加點數?</a>
+          <span style="font-size: 0.9em; color: var(--text-secondary); margin: 0 8px;">|</span>
+          <a id="lnk-terms" href="#" onclick="showTerms(event)" style="font-size: 0.9em; display: inline-block; color: #ef4444;">服務條款 (Terms)</a>
+        </div>
         <div class="dashboard-grid">
           <!-- String Tattoo -->
           <div class="glass-panel">
@@ -114,11 +116,13 @@ document.querySelector('#app').innerHTML = `
           <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;">
             <div style="flex: 1; min-width: 250px; background: rgba(255,255,255,0.2); padding: 15px; border-radius: 8px;">
               <h3 id="lbl-merge-left" style="margin-top: 0;">左邊圖片</h3>
-              <input type="file" id="merge-file-1" accept="image/*" style="width: 100%;" onchange="checkMergeFiles()" />
+              <input type="file" id="merge-file-1" accept="image/*" style="width: 100%; margin-bottom: 10px;" onchange="checkMergeFiles(1)" />
+              <img id="merge-preview-1" class="hidden" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: contain;" />
             </div>
             <div style="flex: 1; min-width: 250px; background: rgba(255,255,255,0.2); padding: 15px; border-radius: 8px;">
               <h3 id="lbl-merge-right" style="margin-top: 0;">右邊圖片</h3>
-              <input type="file" id="merge-file-2" accept="image/*" style="width: 100%;" onchange="checkMergeFiles()" />
+              <input type="file" id="merge-file-2" accept="image/*" style="width: 100%; margin-bottom: 10px;" onchange="checkMergeFiles(2)" />
+              <img id="merge-preview-2" class="hidden" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: contain;" />
             </div>
           </div>
           
@@ -129,9 +133,14 @@ document.querySelector('#app').innerHTML = `
              <img id="merge-result-img" src="" style="max-width: 100%; max-height: 400px; border-radius: 12px; border: 3px solid #8a2be2; margin-top: 10px;" />
              <div style="margin-top: 10px; display: flex; justify-content: center; gap: 10px;">
                 <button id="btn-download-merge" onclick="downloadMergeResult()" style="padding: 8px 20px; background: var(--secondary); border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: #000;">下載圖片</button>
-                <button id="btn-aggressive-merge" onclick="triggerSuperMerge(true)" style="padding: 8px 20px; background: #ef4444; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: #fff;">更強烈的合體！(消耗 1 點)</button>
+                <button id="btn-share-merge" class="hidden" onclick="shareMergeResult()" style="padding: 8px 20px; background: #3b82f6; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: #fff;">分享 (Share)</button>
              </div>
              <p id="lbl-merge-vaultsage" style="margin-top: 10px; color: var(--text-secondary); font-size: 0.85em;">結果已備份至 Vaultsage (加密儲存)</p>
+          </div>
+
+          <div id="merge-history-container" class="hidden" style="margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 2rem;">
+            <h3 id="lbl-merge-history">合體歷史紀錄</h3>
+            <div id="merge-history-list" style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;"></div>
           </div>
         </div>
       </div> <!-- End tab-content-merge -->
@@ -143,9 +152,88 @@ document.querySelector('#app').innerHTML = `
     <div class="loader" style="width: 50px; height: 50px; border-width: 5px; margin-bottom: 1rem;"></div>
     <h3 id="overlay-text">Processing on Blockchain... Please wait.</h3>
   </div>
+
+  <!-- Shared Merge View -->
+  <div id="shared-merge-view" class="hidden" style="width: 100%; min-height: 100vh; padding: 2rem; box-sizing: border-box; text-align: center;">
+    <h1 style="margin-top:0;">超級合體分享 (Super Merge)</h1>
+    <h3 id="shared-merge-owner" style="color: var(--secondary); margin-bottom: 2rem;">Shared by ...</h3>
+    
+    <div id="shared-password-section" class="glass-panel hidden" style="max-width: 400px; margin: 0 auto;">
+       <h3>This merge is password protected</h3>
+       <input type="password" id="shared-merge-password" placeholder="Password" style="width:100%; margin-bottom: 1rem; padding: 10px;" />
+       <button onclick="loadSharedMerge()" style="padding: 8px 20px; background: var(--secondary); border: none; border-radius: 6px; font-weight: bold;">Unlock</button>
+    </div>
+
+    <div id="shared-merge-content" class="hidden">
+        <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;">
+              <h4>Left Image (Body/Style)</h4>
+              <img id="shared-img-left" style="max-width: 100%; max-height: 300px; border-radius: 8px; object-fit: contain;" />
+            </div>
+            <div style="flex: 1; min-width: 200px; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;">
+              <h4>Right Image (Face)</h4>
+              <img id="shared-img-right" style="max-width: 100%; max-height: 300px; border-radius: 8px; object-fit: contain;" />
+            </div>
+        </div>
+        <div style="margin-top: 2rem; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 12px; display: inline-block; max-width: 100%;">
+            <h2 style="margin-top: 0; color: #ff007f;">Fusion Result</h2>
+            <img id="shared-img-result" style="max-width: 100%; max-height: 500px; border-radius: 12px; border: 3px solid #8a2be2;" />
+        </div>
+        <div style="margin-top: 2rem;">
+            <a href="/" style="color: white; text-decoration: underline;">Make your own Super Merge!</a>
+        </div>
+    </div>
+  </div>
 `;
 
 window.sessionToken = null;
+window.currentShareKey = null;
+
+window.loadSharedMerge = async () => {
+    const pwdInput = document.getElementById('shared-merge-password');
+    const pwd = pwdInput ? pwdInput.value : '';
+    
+    let url = `/api/merge/share_info/${window.currentShareKey}`;
+    if (pwd) url += `?password=${encodeURIComponent(pwd)}`;
+    
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        if (res.ok) {
+            if (data.requires_password) {
+                document.getElementById('shared-password-section').classList.remove('hidden');
+                document.getElementById('shared-merge-content').classList.add('hidden');
+                if (pwd) alert("Incorrect password");
+            } else {
+                document.getElementById('shared-password-section').classList.add('hidden');
+                document.getElementById('shared-merge-owner').innerText = `Shared by ${data.owner_name}`;
+                
+                // Load images
+                let pwdQuery = pwd ? `?password=${encodeURIComponent(pwd)}` : '';
+                document.getElementById('shared-img-left').src = `/api/merge/share_image/${window.currentShareKey}/left${pwdQuery}`;
+                document.getElementById('shared-img-right').src = `/api/merge/share_image/${window.currentShareKey}/right${pwdQuery}`;
+                document.getElementById('shared-img-result').src = `/api/merge/share_image/${window.currentShareKey}/result${pwdQuery}`;
+                
+                document.getElementById('shared-merge-content').classList.remove('hidden');
+            }
+        } else {
+            alert(data.detail || "Share link not found");
+        }
+    } catch(e) {
+        alert("Network error");
+    }
+};
+
+// Check if it's a shared link view
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.has('merge_share')) {
+    window.currentShareKey = urlParams.get('merge_share');
+    const appContainer = document.querySelector('.container');
+    if (appContainer) appContainer.classList.add('hidden'); // Hide normal app
+    document.getElementById('shared-merge-view').classList.remove('hidden');
+    window.loadSharedMerge();
+}
 
 window.handleCredentialResponse = async (response) => {
   const jwt = response.credential;
@@ -623,7 +711,24 @@ window.switchTab = (tab) => {
   }
 };
 
-window.checkMergeFiles = () => {
+window.mergeHistory = [];
+
+window.checkMergeFiles = (index) => {
+  const fileInput = document.getElementById(`merge-file-${index}`);
+  const previewImg = document.getElementById(`merge-preview-${index}`);
+  
+  if (fileInput && fileInput.files && fileInput.files[0]) {
+    const file = fileInput.files[0];
+    const objectUrl = URL.createObjectURL(file);
+    previewImg.src = objectUrl;
+    previewImg.classList.remove('hidden');
+    // Store the object URL on the element so we can reuse it in history
+    previewImg.dataset.originalUrl = objectUrl;
+  } else if (previewImg) {
+    previewImg.classList.add('hidden');
+    previewImg.src = '';
+  }
+
   const file1 = document.getElementById('merge-file-1').files.length > 0;
   const file2 = document.getElementById('merge-file-2').files.length > 0;
   const btn = document.getElementById('btn-trigger-merge');
@@ -634,25 +739,60 @@ window.checkMergeFiles = () => {
   }
 };
 
-window.triggerSuperMerge = async (aggressive = false) => {
-  const f1 = document.getElementById('merge-file-1').files[0];
-  const f2 = document.getElementById('merge-file-2').files[0];
+window.triggerSuperMerge = async () => {
+  let f1 = document.getElementById('merge-file-1').files[0];
+  let f2 = document.getElementById('merge-file-2').files[0];
   
-  if (!f1 || !f2) return;
+  const textEl = document.getElementById('overlay-text');
+  showOverlay("Initializing merge process...");
   
-  // Validate sizes
-  if (f1.size > 10 * 1024 * 1024 || f2.size > 10 * 1024 * 1024) {
-    alert("Files must be smaller than 10MB");
-    return;
-  }
-  
-  const formData = new FormData();
-  formData.append("file1", f1);
-  formData.append("file2", f2);
-  formData.append("aggressive", aggressive ? "true" : "false");
-  
-  showOverlay("Super Merging with AI... This might take a minute.");
+  let progressInterval = setInterval(() => {
+    if (!textEl) return;
+    const currentText = textEl.innerText;
+    if (currentText.includes("Initializing")) {
+      textEl.innerText = "[Step 1] AI is extracting features from your images...";
+    } else if (currentText.includes("Step 1")) {
+      textEl.innerText = "[Step 2] AI is designing the fusion prompt...";
+    } else if (currentText.includes("Step 2")) {
+      textEl.innerText = "[Step 3] AI is painting your new realistic avatar... (Almost done!)";
+    }
+  }, 6000);
+
   try {
+    // If files are not in the input (e.g. loaded from history), recover them from preview URLs
+    if (!f1) {
+      const p1 = document.getElementById('merge-preview-1').dataset.originalUrl;
+      if (p1) {
+        const r = await fetch(p1);
+        const b = await r.blob();
+        f1 = new File([b], "history1.jpg", { type: b.type });
+      }
+    }
+    if (!f2) {
+      const p2 = document.getElementById('merge-preview-2').dataset.originalUrl;
+      if (p2) {
+        const r = await fetch(p2);
+        const b = await r.blob();
+        f2 = new File([b], "history2.jpg", { type: b.type });
+      }
+    }
+
+    if (!f1 || !f2) {
+      hideOverlay();
+      return;
+    }
+    
+    // Validate sizes
+    if (f1.size > 10 * 1024 * 1024 || f2.size > 10 * 1024 * 1024) {
+      alert("Files must be smaller than 10MB");
+      hideOverlay();
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append("file1", f1);
+    formData.append("file2", f2);
+    
     const res = await fetch('/api/merge/super_merge', {
       method: 'POST',
       headers: {
@@ -668,13 +808,34 @@ window.triggerSuperMerge = async (aggressive = false) => {
       const resImg = document.getElementById('merge-result-img');
       resImg.src = data.merged_image_url;
       resImg.dataset.downloadUrl = data.merged_image_url; // store to download
+      if (data.merge_id) {
+          resImg.dataset.mergeId = data.merge_id;
+          document.getElementById('btn-share-merge').classList.remove('hidden');
+      } else {
+          resImg.dataset.mergeId = "";
+          document.getElementById('btn-share-merge').classList.add('hidden');
+      }
       resContainer.classList.remove('hidden');
+      
+      // Add to history
+      const prev1 = document.getElementById('merge-preview-1').dataset.originalUrl;
+      const prev2 = document.getElementById('merge-preview-2').dataset.originalUrl;
+      window.mergeHistory.push({
+        merge_id: data.merge_id,
+        left: prev1,
+        right: prev2,
+        result: data.merged_image_url,
+        timestamp: new Date().toLocaleString()
+      });
+      renderMergeHistory();
+      
     } else {
       alert("Merge Failed: " + data.detail);
     }
   } catch (err) {
     alert("Network error.");
   } finally {
+    clearInterval(progressInterval);
     hideOverlay();
   }
 };
@@ -698,6 +859,107 @@ window.downloadMergeResult = async () => {
     // Fallback if fetch fails due to CORS
     window.open(url, '_blank');
   }
+};
+
+window.shareMergeResult = async () => {
+  const mergeId = document.getElementById('merge-result-img').dataset.mergeId;
+  if (!mergeId) return;
+
+  const lang = document.getElementById('lang-select') ? document.getElementById('lang-select').value : 'zh';
+  const wantPassword = confirm(lang === 'zh' ? "是否要為此分享連結設定密碼保護？" : "Do you want to set a password for this shared link?");
+  
+  let password = "";
+  if (wantPassword) {
+      password = prompt(lang === 'zh' ? "請輸入分享密碼：" : "Please enter a password:");
+      if (password === null) return; // User cancelled
+  }
+
+  showOverlay(lang === 'zh' ? "產生分享連結中..." : "Generating share link...");
+  try {
+      const res = await fetch(`/api/merge/share/${mergeId}`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${window.sessionToken}`
+          },
+          body: JSON.stringify({ password: password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+          const shareUrl = window.location.origin + "/?merge_share=" + data.share_key;
+          prompt(lang === 'zh' ? "分享連結已建立！請複製以下網址：" : "Share link created! Copy the URL below:", shareUrl);
+      } else {
+          alert("Error: " + data.detail);
+      }
+  } catch(e) {
+      alert("Network error");
+  } finally {
+      hideOverlay();
+  }
+};
+
+window.renderMergeHistory = () => {
+  const container = document.getElementById('merge-history-container');
+  const listEl = document.getElementById('merge-history-list');
+  
+  if (window.mergeHistory.length > 0) {
+    container.classList.remove('hidden');
+  } else {
+    container.classList.add('hidden');
+    return;
+  }
+  
+  listEl.innerHTML = '';
+  window.mergeHistory.forEach((record, index) => {
+    const item = document.createElement('div');
+    item.style.cssText = "width: 150px; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; cursor: pointer; text-align: center; transition: background 0.2s;";
+    item.onmouseover = () => item.style.background = "rgba(255,255,255,0.2)";
+    item.onmouseout = () => item.style.background = "rgba(255,255,255,0.1)";
+    item.onclick = () => loadMergeHistoryRecord(index);
+    
+    item.innerHTML = `
+      <img src="${record.result}" style="width: 100%; height: 100px; object-fit: cover; border-radius: 6px; margin-bottom: 5px;" />
+      <div style="font-size: 0.8em; color: var(--text-secondary);">${record.timestamp}</div>
+    `;
+    listEl.appendChild(item);
+  });
+};
+
+window.loadMergeHistoryRecord = (index) => {
+  const record = window.mergeHistory[index];
+  if (!record) return;
+  
+  // Load left image
+  const prev1 = document.getElementById('merge-preview-1');
+  prev1.src = record.left;
+  prev1.classList.remove('hidden');
+  
+  // Load right image
+  const prev2 = document.getElementById('merge-preview-2');
+  prev2.src = record.right;
+  prev2.classList.remove('hidden');
+  
+  // Clear file inputs to avoid confusion with what is displayed
+  document.getElementById('merge-file-1').value = "";
+  document.getElementById('merge-file-2').value = "";
+  document.getElementById('btn-trigger-merge').classList.add('hidden');
+  
+  // Load result image
+  const resContainer = document.getElementById('merge-result-container');
+  const resImg = document.getElementById('merge-result-img');
+  resImg.src = record.result;
+  resImg.dataset.downloadUrl = record.result;
+  if (record.merge_id) {
+     resImg.dataset.mergeId = record.merge_id;
+     document.getElementById('btn-share-merge').classList.remove('hidden');
+  } else {
+     resImg.dataset.mergeId = "";
+     document.getElementById('btn-share-merge').classList.add('hidden');
+  }
+  resContainer.classList.remove('hidden');
+  
+  // Scroll to top of the merge tab
+  document.getElementById('tab-content-merge').scrollIntoView({ behavior: 'smooth' });
 };
 
 document.getElementById('lang-select').addEventListener('change', (e) => {
@@ -736,97 +998,8 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('btn-trigger-merge')) document.getElementById('btn-trigger-merge').innerText = "超級合體！(消耗 1 點)";
     if(document.getElementById('lbl-merge-result')) document.getElementById('lbl-merge-result').innerText = "合體結果";
     if(document.getElementById('btn-download-merge')) document.getElementById('btn-download-merge').innerText = "下載圖片";
-    if(document.getElementById('btn-aggressive-merge')) document.getElementById('btn-aggressive-merge').innerText = "更強烈的合體！(消耗 1 點)";
     if(document.getElementById('lbl-merge-vaultsage')) document.getElementById('lbl-merge-vaultsage').innerText = "結果已備份至 Vaultsage (加密儲存)";
   } else {
-    document.getElementById('main-title').innerText = "Digital Tattoo";
-    document.getElementById('main-subtitle').innerText = "Permanently immortalize your data on the Blockchain.";
-    if(document.getElementById('lnk-what-is')) document.getElementById('lnk-what-is').innerText = "what is digital tattoo";
-    if(document.getElementById('lnk-operate')) document.getElementById('lnk-operate').innerText = "operate Blockchain";
-    
-    if(document.getElementById('lbl-create-string')) document.getElementById('lbl-create-string').innerText = "Create String Tattoo";
-    if(document.getElementById('lbl-string-msg')) document.getElementById('lbl-string-msg').innerText = "Message (Max 1000 characters)";
-    if(document.getElementById('btn-string')) document.getElementById('btn-string').innerText = "Tattoo to Blockchain";
-    
-    if(document.getElementById('lbl-create-file')) document.getElementById('lbl-create-file').innerText = "Create File Tattoo";
-    if(document.getElementById('lbl-file-msg')) document.getElementById('lbl-file-msg').innerText = "File (Max 10MB. Images auto-compressed)";
-    if(document.getElementById('btn-file')) document.getElementById('btn-file').innerText = "Tattoo to Blockchain";
-    
-    if(document.getElementById('lbl-string-encrypt')) document.getElementById('lbl-string-encrypt').innerText = "Encrypt Tattoo (We will generate a secure key)";
-    if(document.getElementById('lbl-file-encrypt')) document.getElementById('lbl-file-encrypt').innerText = "Encrypt Tattoo (We will generate a secure key)";
-
-    if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "Your Tattoos";
-    if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "Loading tattoos...";
-    if(document.getElementById('lnk-add-points')) document.getElementById('lnk-add-points').innerText = "How to add points?";
-    if(document.getElementById('lnk-terms')) document.getElementById('lnk-terms').innerText = "Terms of Service";
-    if(document.getElementById('lnk-privacy')) document.getElementById('lnk-privacy').innerText = "Privacy Policy";
-    if(document.getElementById('lnk-terms-static')) document.getElementById('lnk-terms-static').innerText = "Terms of Service";
-    if(document.getElementById('lnk-deletion')) document.getElementById('lnk-deletion').innerText = "Data Deletion";
-    if(document.getElementById('lbl-line-login')) document.getElementById('lbl-line-login').innerText = "Login with LINE";
-    if(document.getElementById('tab-btn-tattoo')) document.getElementById('tab-btn-tattoo').innerText = "Digital Tattoo";
-    if(document.getElementById('tab-btn-merge')) document.getElementById('tab-btn-merge').innerText = "Super Merge";
-    if(document.getElementById('lbl-super-merge')) document.getElementById('lbl-super-merge').innerText = "Super Merge";
-    if(document.getElementById('lbl-merge-desc')) document.getElementById('lbl-merge-desc').innerText = "Upload two images to generate a fusion! Costs 1 point.";
-    if(document.getElementById('lbl-merge-left')) document.getElementById('lbl-merge-left').innerText = "Left Image";
-    if(document.getElementById('lbl-merge-right')) document.getElementById('lbl-merge-right').innerText = "Right Image";
-    if(document.getElementById('btn-trigger-merge')) document.getElementById('btn-trigger-merge').innerText = "Super Merge! (Cost 1 Point)";
-    if(document.getElementById('lbl-merge-result')) document.getElementById('lbl-merge-result').innerText = "Fusion Result";
-    if(document.getElementById('btn-download-merge')) document.getElementById('btn-download-merge').innerText = "Download Image";
-    if(document.getElementById('btn-aggressive-merge')) document.getElementById('btn-aggressive-merge').innerText = "Aggressive Fusion! (Cost 1 Point)";
-    if(document.getElementById('lbl-merge-vaultsage')) document.getElementById('lbl-merge-vaultsage').innerText = "Result backed up to Vaultsage (Encrypted)";
-  }
-  
-  if (window.sessionToken) {
-    loadTattoos();
-  }
-});
-
-window.shareTattoo = async (id, e = null) => {
-  if(e) e.stopPropagation();
-  const lang = document.getElementById('lang-select').value;
-  showOverlay(lang === 'zh' ? "產生分享連結中..." : "Generating share link...");
-  
-  try {
-    const res = await fetch(`/api/tattoo/share/${id}`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${window.sessionToken}` }
-    });
-    const data = await res.json();
-    if (res.ok) {
-        const shareUrl = `${window.location.origin}/tattoo/${data.share_key}`;
-        const titleText = lang === 'zh' ? '分享你的刺青' : 'Share Your Tattoo';
-        const closeText = lang === 'zh' ? '關閉' : 'Close';
-        const copyText = lang === 'zh' ? '複製連結' : 'Copy Link';
-        
-        const fbShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
-        const xShareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(titleText)}`;
-        const liShareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
-        
-        const modal = document.createElement('div');
-        modal.id = 'share-modal';
-        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;';
-        modal.innerHTML = `
-          <div style="background: var(--bg-dark, #1a1a2e); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%;">
-            <h3 style="color: white; margin: 0 0 16px 0;">${titleText}</h3>
-            <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-               <input type="text" id="share-link-input" value="${shareUrl}" readonly style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #ccc; background: rgba(255,255,255,0.9); color: black;" />
-               <button onclick="navigator.clipboard.writeText(document.getElementById('share-link-input').value); alert('${lang === 'zh' ? '已複製！' : 'Copied!'}');" style="padding: 8px 16px; background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap;">${copyText}</button>
-            </div>
-            
-            <div style="display: flex; gap: 8px; margin-bottom: 24px; justify-content: center; flex-wrap: wrap;">
-                <a href="${fbShareUrl}" target="_blank" style="padding: 8px 16px; background: #1877F2; color: white; border-radius: 6px; text-decoration: none; font-weight: bold; flex: 1; text-align: center; min-width: 100px;">Facebook</a>
-                <a href="${xShareUrl}" target="_blank" style="padding: 8px 16px; background: #000000; color: white; border-radius: 6px; text-decoration: none; font-weight: bold; flex: 1; text-align: center; min-width: 100px;">X (Twitter)</a>
-                <a href="${liShareUrl}" target="_blank" style="padding: 8px 16px; background: #0A66C2; color: white; border-radius: 6px; text-decoration: none; font-weight: bold; flex: 1; text-align: center; min-width: 100px;">LinkedIn</a>
-            </div>
-            
-            <div style="text-align: right;">
-              <button onclick="document.getElementById('share-modal').remove()" style="padding: 6px 16px; background: rgba(139,92,246,0.3); border: 1px solid rgba(139,92,246,0.5); color: white; border-radius: 6px; cursor: pointer;">${closeText}</button>
-            </div>
-          </div>
-        `;
-        document.body.appendChild(modal);
-        modal.addEventListener('click', (ev) => { if(ev.target === modal) modal.remove(); });
-    } else {
         alert("Error: " + data.detail);
     }
   } catch (err) {
