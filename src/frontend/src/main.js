@@ -516,18 +516,24 @@ function renderGoogleButton() {
 
 function initFacebook() {
   if (window.FB) {
+    console.log("Initializing Facebook SDK...");
     FB.init({
       appId: import.meta.env.VITE_FB_APP_ID || 'MISSING_FB_ID',
       cookie: true,
       xfbml: true,
       version: 'v19.0'
     });
+    window.FB_INITIALIZED = true;
   } else {
     setTimeout(initFacebook, 100);
   }
 }
 
 window.handleFacebookLogin = () => {
+  if (!window.FB || !window.FB_INITIALIZED) {
+    alert("Facebook SDK is still initializing. Please try again in a few seconds.");
+    return;
+  }
   FB.login((response) => {
     if (response.authResponse) {
       const accessToken = response.authResponse.accessToken;
