@@ -51,10 +51,22 @@ async def super_merge(
     
     # 3. Call xAI
     is_aggressive = aggressive.lower() == "true"
-    prompt = "Combine the subjects from these two images to create a brand new character. The new character should undergo a 'Saiyan Fusion', blending their hairstyles and facial features. The character must wear the classic Metamoran fusion dance outfit (black and blue vest, white baggy pants, and sash), in a high-quality modern anime style."
+    
+    prompt = (
+        "Carefully analyze the two input images. "
+        "Combine the subjects from these two images into a single, cohesive new character that naturally blends their facial features, hairstyles, and overall styles. "
+        "CRITICAL INSTRUCTION: If the input images are of real humans (photographs), the resulting image MUST be highly realistic photography of a single human. Do NOT generate a cartoon or anime style unless both input images are already cartoons. "
+        "Ensure the lighting and proportions are natural and photorealistic if the inputs are photos."
+    )
     
     if is_aggressive:
-        prompt = "AGGRESSIVE FUSION: Combine the subjects from these two images to create an ultimate, highly detailed, dramatic brand new character. Extremely dynamic pose, intense aura and lighting, 'Saiyan Fusion' blending their hairstyles and facial features. The character must wear the classic Metamoran fusion dance outfit, in a high-quality modern anime style. Emphasize epic power!"
+        prompt = (
+            "SECOND MERGE (ENHANCED): Carefully analyze the two input images. "
+            "Combine the subjects into a single, cohesive new character. "
+            "For this version, strictly emphasize and elevate the most attractive, charismatic, and positive physical traits of each original subject. "
+            "The final character should look significantly more beautiful/handsome, confident, and polished, presenting the best possible idealized version of the two inputs. "
+            "CRITICAL INSTRUCTION: If the input images are real humans, the output MUST be a highly realistic photograph. Do NOT generate cartoon or anime styles unless both inputs are cartoons."
+        )
 
     try:
         response = await xai_client.images.generate(
