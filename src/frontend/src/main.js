@@ -4,12 +4,12 @@ document.querySelector('#app').innerHTML = `
   <div class="container">
     <div class="header-nav" style="position: absolute; top: 20px; right: 20px; z-index: 10; display: flex; align-items: center; gap: 15px;">
       <div class="static-links" style="display: flex; gap: 15px; font-size: 0.85em;">
-        <a id="lnk-privacy" href="/privacy.html" style="color: rgba(255,255,255,0.6); text-decoration: none;">隱私權政策</a>
-        <a id="lnk-terms-static" href="/terms.html" style="color: rgba(255,255,255,0.6); text-decoration: none;">服務條款</a>
-        <a id="lnk-deletion" href="/deletion.html" style="color: rgba(255,255,255,0.6); text-decoration: none;">資料刪除</a>
+        <a id="lnk-privacy" href="/privacy.html" style="color: #003366; font-weight: 600; text-decoration: none;">隱私權政策</a>
+        <a id="lnk-terms-static" href="/terms.html" style="color: #003366; font-weight: 600; text-decoration: none;">服務條款</a>
+        <a id="lnk-deletion" href="/deletion.html" style="color: #003366; font-weight: 600; text-decoration: none;">資料刪除</a>
       </div>
       <div class="lang-selector">
-        <select id="lang-select" style="padding: 5px 10px; border-radius: 5px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); outline: none; cursor: pointer;">
+        <select id="lang-select" style="padding: 5px 10px; border-radius: 5px; background: rgba(255,255,255,0.7); color: #003366; font-weight: 600; border: 1px solid #003366; outline: none; cursor: pointer;">
           <option value="zh" style="color: black;" selected>正體中文</option>
           <option value="en" style="color: black;">English</option>
         </select>
