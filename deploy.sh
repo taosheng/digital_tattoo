@@ -8,10 +8,10 @@ SERVICE_NAME="tattoo-web"
 echo "Using Project ID: $PROJECT_ID"
 
 # Read Client IDs from .env
-GOOGLE_CLIENT_ID=$(grep VITE_GOOGLE_CLIENT_ID .env | cut -d '=' -f2)
-FB_APP_ID=$(grep VITE_FB_APP_ID .env | cut -d '=' -f2)
-LINE_CLIENT_ID=$(grep VITE_LINE_CLIENT_ID .env | cut -d '=' -f2)
-LINE_CLIENT_SECRET=$(grep LINE_CLIENT_SECRET .env | cut -d '=' -f2)
+GOOGLE_CLIENT_ID=$(grep "^VITE_GOOGLE_CLIENT_ID=" .env | cut -d '=' -f2)
+FB_APP_ID=$(grep "^FB_APP_ID=" .env | cut -d '=' -f2)
+LINE_CLIENT_ID=$(grep "^VITE_LINE_CLIENT_ID=" .env | cut -d '=' -f2)
+LINE_CLIENT_SECRET=$(grep "^LINE_CLIENT_SECRET=" .env | cut -d '=' -f2)
 
 echo "Building Docker image for $SERVICE_NAME..."
 # Build from root context using the unified Dockerfile
