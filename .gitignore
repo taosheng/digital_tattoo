@@ -28,6 +28,7 @@ dist/
 test*.py
 *.jpg
 *.png
+!digital-tattoo-icon-1024.png
 *.webp
 download.jpg
 no_checkin
