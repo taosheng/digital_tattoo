@@ -998,16 +998,46 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('btn-trigger-merge')) document.getElementById('btn-trigger-merge').innerText = "超級合體！(消耗 1 點)";
     if(document.getElementById('lbl-merge-result')) document.getElementById('lbl-merge-result').innerText = "合體結果";
     if(document.getElementById('btn-download-merge')) document.getElementById('btn-download-merge').innerText = "下載圖片";
+    if(document.getElementById('btn-share-merge')) document.getElementById('btn-share-merge').innerText = "分享 (Share)";
     if(document.getElementById('lbl-merge-vaultsage')) document.getElementById('lbl-merge-vaultsage').innerText = "結果已備份至 Vaultsage (加密儲存)";
   } else {
-        alert("Error: " + data.detail);
-    }
-  } catch (err) {
-    alert("Network error.");
-  } finally {
-    hideOverlay();
+    document.getElementById('main-title').innerText = "Digital Tattoo";
+    document.getElementById('main-subtitle').innerText = "Your data on the blockchain, forever.";
+    if(document.getElementById('lnk-what-is')) document.getElementById('lnk-what-is').innerText = "What is Digital Tattoo";
+    if(document.getElementById('lnk-operate')) document.getElementById('lnk-operate').innerText = "How to operate blockchain";
+    
+    if(document.getElementById('lbl-create-string')) document.getElementById('lbl-create-string').innerText = "Create String Tattoo";
+    if(document.getElementById('lbl-string-msg')) document.getElementById('lbl-string-msg').innerText = "Message (Max 1000 chars)";
+    if(document.getElementById('btn-string')) document.getElementById('btn-string').innerText = "Tattoo into Blockchain";
+    
+    if(document.getElementById('lbl-create-file')) document.getElementById('lbl-create-file').innerText = "Create File Tattoo";
+    if(document.getElementById('lbl-file-msg')) document.getElementById('lbl-file-msg').innerText = "File (Max 10MB. Images auto-compressed)";
+    if(document.getElementById('btn-file')) document.getElementById('btn-file').innerText = "Tattoo into Blockchain";
+    
+    if(document.getElementById('lbl-string-encrypt')) document.getElementById('lbl-string-encrypt').innerText = "Encrypt Tattoo (We auto-generate key)";
+    if(document.getElementById('lbl-file-encrypt')) document.getElementById('lbl-file-encrypt').innerText = "Encrypt Tattoo (We auto-generate key)";
+    
+    if(document.getElementById('lbl-tattoos')) document.getElementById('lbl-tattoos').innerText = "Your Tattoos";
+    if(document.getElementById('lbl-loading')) document.getElementById('lbl-loading').innerText = "Loading...";
+    if(document.getElementById('lnk-add-points')) document.getElementById('lnk-add-points').innerText = "How to add points?";
+    if(document.getElementById('lnk-terms')) document.getElementById('lnk-terms').innerText = "Terms of Service";
+    if(document.getElementById('lnk-privacy')) document.getElementById('lnk-privacy').innerText = "Privacy Policy";
+    if(document.getElementById('lnk-terms-static')) document.getElementById('lnk-terms-static').innerText = "Terms of Service";
+    if(document.getElementById('lnk-deletion')) document.getElementById('lnk-deletion').innerText = "Data Deletion";
+    if(document.getElementById('lbl-line-login')) document.getElementById('lbl-line-login').innerText = "LINE Login";
+    if(document.getElementById('tab-btn-tattoo')) document.getElementById('tab-btn-tattoo').innerText = "Digital Tattoo";
+    if(document.getElementById('tab-btn-merge')) document.getElementById('tab-btn-merge').innerText = "Super Merge";
+    if(document.getElementById('lbl-super-merge')) document.getElementById('lbl-super-merge').innerText = "Super Merge";
+    if(document.getElementById('lbl-merge-desc')) document.getElementById('lbl-merge-desc').innerText = "Upload 2 images and create a new fusion character! Cost 1 Point.";
+    if(document.getElementById('lbl-merge-left')) document.getElementById('lbl-merge-left').innerText = "Left Image";
+    if(document.getElementById('lbl-merge-right')) document.getElementById('lbl-merge-right').innerText = "Right Image";
+    if(document.getElementById('btn-trigger-merge')) document.getElementById('btn-trigger-merge').innerText = "Super Merge! (Cost 1 Point)";
+    if(document.getElementById('lbl-merge-result')) document.getElementById('lbl-merge-result').innerText = "Fusion Result";
+    if(document.getElementById('btn-download-merge')) document.getElementById('btn-download-merge').innerText = "Download Image";
+    if(document.getElementById('btn-share-merge')) document.getElementById('btn-share-merge').innerText = "Share";
+    if(document.getElementById('lbl-merge-vaultsage')) document.getElementById('lbl-merge-vaultsage').innerText = "Result backed up to Vaultsage (Encrypted)";
   }
-};
+});
 
 window.showPointsInfo = (e) => {
   if (e) e.preventDefault();
