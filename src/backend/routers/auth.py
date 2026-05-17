@@ -123,38 +123,3 @@ def auth_google(req: LoginRequest):
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid Token: {str(e)}")
-
-@router.post("/facebook")
-async def auth_facebook(req: LoginRequest):
-    import httpx
-    async with httpx.AsyncClient() as client:
-        # Verify token with Facebook Graph API
-        resp = await client.get(
-            "https://graph.facebook.com/me",
-            params={
-                "access_token": req.token,
-                "fields": "id,name,email"
-            }
-        )
-        if resp.status_code != 200:
-            raise HTTPException(status_code=400, detail="Invalid Facebook Token")
-        
-        fb_data = resp.json()
-        fb_id = fb_data.get('id')
-        email = fb_data.get('email')
-        if not email:
-            # Fallback if email is not provided
-            email = f"{fb_id}@facebook.com"
-            
-        name = fb_data.get('name', 'Facebook User')
-        
-        points = sync_user_to_db(email, name, fb_id, "facebook")
-        
-        return {
-            "session_token": email,
-            "user": {
-                "name": name,
-                "email": email,
-                "points": points
-            }
-        }
