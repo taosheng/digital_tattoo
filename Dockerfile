@@ -8,7 +8,9 @@ RUN npm install
 COPY src/frontend/ .
 # Build arguments for frontend
 ARG VITE_GOOGLE_CLIENT_ID
+ARG VITE_FB_APP_ID
 ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+ENV VITE_FB_APP_ID=$VITE_FB_APP_ID
 # API URL is relative, so we don't strictly need VITE_API_URL, but keeping it empty or default is fine.
 RUN npm run build
 

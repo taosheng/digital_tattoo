@@ -7,13 +7,15 @@ SERVICE_NAME="tattoo-web"
 
 echo "Using Project ID: $PROJECT_ID"
 
-# Read Google Client ID from .env
+# Read Google and Facebook IDs from .env
 GOOGLE_CLIENT_ID=$(grep VITE_GOOGLE_CLIENT_ID .env | cut -d '=' -f2)
+FB_APP_ID=$(grep VITE_FB_APP_ID .env | cut -d '=' -f2)
 
 echo "Building Docker image for $SERVICE_NAME..."
 # Build from root context using the unified Dockerfile
 docker build --platform linux/amd64 \
     --build-arg VITE_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
+    --build-arg VITE_FB_APP_ID="$FB_APP_ID" \
     -t "gcr.io/$PROJECT_ID/$SERVICE_NAME" .
 
 echo "Configuring Docker authentication..."

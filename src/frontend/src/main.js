@@ -21,7 +21,13 @@ document.querySelector('#app').innerHTML = `
       <p id="main-subtitle" style="text-align: center; color: var(--text-secondary); margin-bottom: 2rem;">
         你的資料刺進區塊鏈 永遠不會消失！
       </p>
-      <div id="google-login-btn-container" style="display: flex; justify-content: center; min-height: 44px;"></div>
+      <div id="google-login-btn-container" style="display: flex; justify-content: center; min-height: 44px; margin-bottom: 1rem;"></div>
+      <div id="fb-login-btn-container" style="display: flex; justify-content: center; min-height: 44px;">
+        <button id="btn-fb-login" onclick="handleFacebookLogin()" style="background-color: #1877F2; color: white; border: none; border-radius: 22px; padding: 0 24px; height: 40px; font-weight: bold; display: flex; align-items: center; gap: 8px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+          <span id="lbl-fb-login">Facebook 登入</span>
+        </button>
+      </div>
       <div style="text-align: center; margin-top: 2rem;">
         <a id="lnk-terms-login" href="#" onclick="showTerms(event)" style="font-size: 0.85em; color: #ef4444;">服務條款 (Terms)</a>
       </div>
@@ -508,7 +514,54 @@ function renderGoogleButton() {
   }
 }
 
+function initFacebook() {
+  if (window.FB) {
+    FB.init({
+      appId: import.meta.env.VITE_FB_APP_ID || 'MISSING_FB_ID',
+      cookie: true,
+      xfbml: true,
+      version: 'v19.0'
+    });
+  } else {
+    setTimeout(initFacebook, 100);
+  }
+}
+
+window.handleFacebookLogin = () => {
+  FB.login((response) => {
+    if (response.authResponse) {
+      const accessToken = response.authResponse.accessToken;
+      sendFacebookToken(accessToken);
+    } else {
+      console.log('User cancelled login or did not fully authorize.');
+    }
+  }, { scope: 'email,public_profile' });
+};
+
+async function sendFacebookToken(token) {
+  showOverlay("Authenticating with Facebook...");
+  try {
+    const res = await fetch('/api/auth/facebook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      window.sessionToken = data.session_token;
+      initDashboard(data.user);
+    } else {
+      alert("Facebook Authentication Failed: " + data.detail);
+    }
+  } catch (err) {
+    alert("Network error.");
+  } finally {
+    hideOverlay();
+  }
+}
+
 renderGoogleButton();
+initFacebook();
 
 // Language Selector Logic
 document.getElementById('lang-select').addEventListener('change', (e) => {
@@ -538,6 +591,7 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lnk-privacy')) document.getElementById('lnk-privacy').innerText = "隱私權政策";
     if(document.getElementById('lnk-terms-static')) document.getElementById('lnk-terms-static').innerText = "服務條款";
     if(document.getElementById('lnk-deletion')) document.getElementById('lnk-deletion').innerText = "資料刪除";
+    if(document.getElementById('lbl-fb-login')) document.getElementById('lbl-fb-login').innerText = "Facebook 登入";
   } else {
     document.getElementById('main-title').innerText = "Digital Tattoo";
     document.getElementById('main-subtitle').innerText = "Permanently immortalize your data on the Blockchain.";
@@ -563,6 +617,7 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lnk-privacy')) document.getElementById('lnk-privacy').innerText = "Privacy Policy";
     if(document.getElementById('lnk-terms-static')) document.getElementById('lnk-terms-static').innerText = "Terms of Service";
     if(document.getElementById('lnk-deletion')) document.getElementById('lnk-deletion').innerText = "Data Deletion";
+    if(document.getElementById('lbl-fb-login')) document.getElementById('lbl-fb-login').innerText = "Login with Facebook";
   }
   
   if (window.sessionToken) {
