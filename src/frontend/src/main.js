@@ -22,10 +22,16 @@ document.querySelector('#app').innerHTML = `
         你的資料刺進區塊鏈 永遠不會消失！
       </p>
       <div id="google-login-btn-container" style="display: flex; justify-content: center; min-height: 44px; margin-bottom: 1rem;"></div>
-      <div id="fb-login-btn-container" style="display: flex; justify-content: center; min-height: 44px;">
+      <div id="fb-login-btn-container" style="display: flex; justify-content: center; min-height: 44px; margin-bottom: 1rem;">
         <button id="btn-fb-login" onclick="handleFacebookLogin()" style="background-color: #1877F2; color: white; border: none; border-radius: 22px; padding: 0 24px; height: 40px; font-weight: bold; display: flex; align-items: center; gap: 8px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
           <span id="lbl-fb-login">Facebook 登入</span>
+        </button>
+      </div>
+      <div id="line-login-btn-container" style="display: flex; justify-content: center; min-height: 44px;">
+        <button id="btn-line-login" onclick="handleLineLogin()" style="background-color: #06C755; color: white; border: none; border-radius: 22px; padding: 0 24px; height: 40px; font-weight: bold; display: flex; align-items: center; gap: 8px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M24 10.304c0-5.369-5.383-9.738-12-9.738S0 4.935 0 10.304c0 4.814 4.269 8.846 10.036 9.608.391.084.922.258 1.057.592.121.298.079.76.038 1.054-.04.288-.242 1.458-.295 1.748-.09.493-.424 2.11 1.854 1.155 2.278-.955 12.28-7.227 12.28-14.157zm-14.887 2.196h-2.22V8.406c0-.435.352-.787.787-.787s.787.352.787.787v3.307h1.434c.435 0 .787.352.787.787s-.352.787-.787.787zm3.178 0h-1.574c-.435 0-.787-.352-.787-.787V8.406c0-.435.352-.787.787-.787s.787.352.787.787v3.307c0 .435-.352.787-.787.787zm5.556 0h-1.554l-1.92-2.58v2.58c0 .435-.352.787-.787.787s-.787-.352-.787-.787V8.406c0-.435.352-.787.787-.787.322 0 .61.194.728.49l1.96 2.628V8.406c0-.435.352-.787.787-.787s.787.352.787.787v3.307c0 .435-.352.787-.787.787zm4.275-3.307h-2.22v.72h2.22c.435 0 .787.352.787.787s-.352.787-.787.787h-2.22v.998h2.22c.435 0 .787.352.787.787s-.352.787-.787.787h-3.007c-.435 0-.787-.352-.787-.787V8.406c0-.435.352-.787.787-.787h3.007c.435 0 .787.352.787.787s-.352.787-.787.787z"/></svg>
+          <span id="lbl-line-login">LINE 登入</span>
         </button>
       </div>
       <div style="text-align: center; margin-top: 2rem;">
@@ -529,7 +535,60 @@ function initFacebook() {
   }
 }
 
-window.handleFacebookLogin = () => {
+window.handleLineLogin = () => {
+  const lineClientId = import.meta.env.VITE_LINE_CLIENT_ID;
+  if (!lineClientId) {
+    alert("LINE Client ID is missing.");
+    return;
+  }
+  const redirectUri = encodeURIComponent(window.location.origin);
+  const state = Math.random().toString(36).substring(7); // Basic CSRF protection
+  // Store state in session storage to verify upon return
+  sessionStorage.setItem('line_auth_state', state);
+  
+  const lineAuthUrl = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${lineClientId}&redirect_uri=${redirectUri}&state=${state}&scope=profile%20openid%20email`;
+  window.location.href = lineAuthUrl;
+};
+
+// Check for LINE auth callback on load
+window.addEventListener('DOMContentLoaded', async () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const code = urlParams.get('code');
+  const state = urlParams.get('state');
+  
+  if (code && state) {
+    const savedState = sessionStorage.getItem('line_auth_state');
+    if (state === savedState) {
+      sessionStorage.removeItem('line_auth_state');
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      showOverlay("Authenticating with LINE...");
+      try {
+        const res = await fetch('/api/auth/line', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            code: code,
+            redirect_uri: window.location.origin
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          window.sessionToken = data.session_token;
+          initDashboard(data.user);
+        } else {
+          alert("LINE Authentication Failed: " + data.detail);
+        }
+      } catch (err) {
+        alert("Network error.");
+      } finally {
+        hideOverlay();
+      }
+    } else {
+      console.warn("LINE state mismatch. Potential CSRF.");
+    }
+  }
+});
   if (!window.FB || !window.FB_INITIALIZED) {
     alert("Facebook SDK is still initializing. Please try again in a few seconds.");
     return;
@@ -598,6 +657,7 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lnk-terms-static')) document.getElementById('lnk-terms-static').innerText = "服務條款";
     if(document.getElementById('lnk-deletion')) document.getElementById('lnk-deletion').innerText = "資料刪除";
     if(document.getElementById('lbl-fb-login')) document.getElementById('lbl-fb-login').innerText = "Facebook 登入";
+    if(document.getElementById('lbl-line-login')) document.getElementById('lbl-line-login').innerText = "LINE 登入";
   } else {
     document.getElementById('main-title').innerText = "Digital Tattoo";
     document.getElementById('main-subtitle').innerText = "Permanently immortalize your data on the Blockchain.";
@@ -624,6 +684,7 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lnk-terms-static')) document.getElementById('lnk-terms-static').innerText = "Terms of Service";
     if(document.getElementById('lnk-deletion')) document.getElementById('lnk-deletion').innerText = "Data Deletion";
     if(document.getElementById('lbl-fb-login')) document.getElementById('lbl-fb-login').innerText = "Login with Facebook";
+    if(document.getElementById('lbl-line-login')) document.getElementById('lbl-line-login').innerText = "Login with LINE";
   }
   
   if (window.sessionToken) {
