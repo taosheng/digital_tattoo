@@ -2,11 +2,18 @@ import './style.css';
 
 document.querySelector('#app').innerHTML = `
   <div class="container">
-    <div class="lang-selector" style="position: absolute; top: 20px; right: 20px; z-index: 10;">
-      <select id="lang-select" style="padding: 5px 10px; border-radius: 5px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); outline: none; cursor: pointer;">
-        <option value="zh" style="color: black;" selected>正體中文</option>
-        <option value="en" style="color: black;">English</option>
-      </select>
+    <div class="header-nav" style="position: absolute; top: 20px; right: 20px; z-index: 10; display: flex; align-items: center; gap: 15px;">
+      <div class="static-links" style="display: flex; gap: 15px; font-size: 0.85em;">
+        <a id="lnk-privacy" href="/privacy.html" style="color: rgba(255,255,255,0.6); text-decoration: none;">隱私權政策</a>
+        <a id="lnk-terms-static" href="/terms.html" style="color: rgba(255,255,255,0.6); text-decoration: none;">服務條款</a>
+        <a id="lnk-deletion" href="/deletion.html" style="color: rgba(255,255,255,0.6); text-decoration: none;">資料刪除</a>
+      </div>
+      <div class="lang-selector">
+        <select id="lang-select" style="padding: 5px 10px; border-radius: 5px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); outline: none; cursor: pointer;">
+          <option value="zh" style="color: black;" selected>正體中文</option>
+          <option value="en" style="color: black;">English</option>
+        </select>
+      </div>
     </div>
     <div id="login-view" class="glass-panel" style="margin-top: 40px; text-align: center;">
       <img src="/icon.svg" alt="Digital Tattoo Logo" style="width: 80px; height: 80px; margin-bottom: 10px; filter: drop-shadow(0 0 10px rgba(138,43,226,0.5));" />
@@ -528,6 +535,9 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lnk-add-points')) document.getElementById('lnk-add-points').innerText = "如何增加點數?";
     if(document.getElementById('lnk-terms')) document.getElementById('lnk-terms').innerText = "服務條款 (Terms)";
     if(document.getElementById('lnk-terms-login')) document.getElementById('lnk-terms-login').innerText = "服務條款 (Terms)";
+    if(document.getElementById('lnk-privacy')) document.getElementById('lnk-privacy').innerText = "隱私權政策";
+    if(document.getElementById('lnk-terms-static')) document.getElementById('lnk-terms-static').innerText = "服務條款";
+    if(document.getElementById('lnk-deletion')) document.getElementById('lnk-deletion').innerText = "資料刪除";
   } else {
     document.getElementById('main-title').innerText = "Digital Tattoo";
     document.getElementById('main-subtitle').innerText = "Permanently immortalize your data on the Blockchain.";
@@ -550,6 +560,9 @@ document.getElementById('lang-select').addEventListener('change', (e) => {
     if(document.getElementById('lnk-add-points')) document.getElementById('lnk-add-points').innerText = "How to add points?";
     if(document.getElementById('lnk-terms')) document.getElementById('lnk-terms').innerText = "Terms of Service";
     if(document.getElementById('lnk-terms-login')) document.getElementById('lnk-terms-login').innerText = "Terms of Service";
+    if(document.getElementById('lnk-privacy')) document.getElementById('lnk-privacy').innerText = "Privacy Policy";
+    if(document.getElementById('lnk-terms-static')) document.getElementById('lnk-terms-static').innerText = "Terms of Service";
+    if(document.getElementById('lnk-deletion')) document.getElementById('lnk-deletion').innerText = "Data Deletion";
   }
   
   if (window.sessionToken) {
