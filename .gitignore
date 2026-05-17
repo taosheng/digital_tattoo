@@ -26,6 +26,10 @@ dist/
 
 # Temporary/Tests
 test*.py
+*.pyc
+*.swp
+src/ar_keygen*.py
+src/backend/simulate_upload.py
 *.jpg
 *.png
 !digital-tattoo-icon-1024.png
